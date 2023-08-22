@@ -1,0 +1,4 @@
+# This directory contains import files
+# Don't track any csv or json files
+*.json
+*.csv

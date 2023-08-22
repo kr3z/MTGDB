@@ -122,3 +122,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Don't track the db.properties file, just the db.properties.template file
+db.properties
