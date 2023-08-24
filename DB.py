@@ -11,7 +11,9 @@ db_user=config.get("db", "user")
 db_password=config.get("db", "password")
 
 class DBConnection():
-    __open_connections = []
+    _open_connections = []
+    _id_pool = []
+
     def __init__(self):
         self.conn = mysql.connector.connect(host=db_host,
                                    database=db_name,
@@ -22,7 +24,7 @@ class DBConnection():
         self.conn.sql_mode = 'TRADITIONAL,NO_ENGINE_SUBSTITUTION'
         self.cursor = self.conn.cursor()
 
-        DBConnection.__open_connections.append(self.conn)
+        DBConnection._open_connections.append(self.conn)
 
 
     def close(self):
@@ -30,7 +32,7 @@ class DBConnection():
             if self.cursor is not None:
                 self.cursor.close()
             
-            DBConnection.__open_connections.remove(self.conn)
+            DBConnection._open_connections.remove(self.conn)
             self.conn.close()
 
     def commit(self):
@@ -60,3 +62,11 @@ class DBConnection():
                 conn.close()
 
         return res
+
+    @staticmethod
+    def getNextId():
+        if(len(DBConnection._id_pool) == 0):
+            res = DBConnection.singleQuery("SELECT NEXT VALUE FOR id_seq")
+            next_val = res[0][0]
+            DBConnection._id_pool.extend(range(next_val,next_val+100))
+        return DBConnection._id_pool.pop(0)
