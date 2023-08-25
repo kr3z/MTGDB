@@ -48,9 +48,6 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
             new_card_data = MTGCard.getNewBatch()
             cursor.executemany(MTGCard.insert_sql,new_card_data)
 
-            #id_sql = MTGCard.id_sql_start + ','.join(["%s"]*len(new_card_data)) + ")"
-            #cursor.execute(id_sql,[row[0] for row in new_card_data])
-            #MTGCard.updateIds(new_card_data,cursor.fetchall())
             conn.commit()
             counts['NewCards']+=len(new_card_data)
             logger.info("Cards Imported: %d" ,counts['NewCards'])
@@ -65,37 +62,24 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
 
         # TODO: COnsilidate new and update blocks
         while(MTGPrint.hasNewData()):
-            new_print_data, new_addl_data = MTGPrint.getNewBatch()
+            new_print_data, new_addl_print_data, new_addl_data = MTGPrint.getNewBatch()
             cursor.executemany(MTGPrint.insert_sql,new_print_data)
+            cursor.executemany(MTGPrint.insert_addl_sql,new_addl_print_data)
 
             print_keys = [row[-1] for row in new_print_data]
-
-            #id_sql = MTGPrint.id_sql_start + ','.join(["%s"]*len(new_print_data)) + ")"
-            #scryfall_ids = [row[2] for row in new_print_data]
-            #cursor.execute(id_sql, scryfall_ids)
-            #MTGPrint.updateIds(new_print_data,cursor.fetchall())
             
             cursor.executemany(CardFace.insert_sql,CardFace.getBatchData())
             cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
-            # TODO: We don't need to be dealing with price here, just handle all prices in _new_prices
-            #cursor.executemany(MTGPrice.insert_sql,MTGPrice.getBatchData())
             cursor.executemany(Legalities.insert_sql,Legalities.getBatchData())
 
             addl_data = []
-            #legalities_data = []
-            #for scryfall_id in scryfall_ids:
             # TODO: This can be improved in getBatch since we already have print_key
             for print_key in print_keys:
-                #print_key = MTGPrint.getPrintKey(scryfall_id)
                 if new_addl_data.get(print_key):
                     for data in new_addl_data.get(print_key):
                         addl_data.append([print_key] + data)
-                #if new_legalities.get(print_key):
-                    #for data in new_legalities.get(scryfall_id):
-                #        legalities_data.append([print_key] + new_legalities.get(print_key))
 
             cursor.executemany(MTGPrint.insert_addl_data_sql,addl_data)
-            #cursor.executemany(MTGPrint.insert_legalities_sql,legalities_data)
 
             conn.commit()
             counts['NewPrints']+=len(new_print_data)
@@ -104,7 +88,9 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
         while(MTGPrint.hasUpdateData()):
             # TODO: update legalities instead of delete/re-insert
             update_print_data, update_addl_data = MTGPrint.getUpdateBatch()
+            update_print_data, update_print_addl_data, update_addl_data = MTGPrint.getUpdateBatch()
             cursor.executemany(MTGPrint.update_sql,update_print_data)
+            cursor.executemany(MTGPrint.update_addl_sql,update_print_addl_data)
 
             print_keys = [row[-1] for row in update_print_data]
 
@@ -123,18 +109,11 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
             # cursor.executemany(Legalities.update_sql,Legalities.getBatchData())
 
             addl_data = []
-            #legalities_data = []
-            #scryfall_ids = [row[2] for row in update_print_data]
-            #for scryfall_id in scryfall_ids:
             # TODO: This can be improved in getBatch since we already have print_key
             for print_key in print_keys:
-                #print_key = MTGPrint.getPrintKey(scryfall_id)
                 if update_addl_data.get(print_key):
                     for data in update_addl_data.get(print_key):
                         addl_data.append([print_key] + data)
-                #if update_legalities.get(print_key):
-                    #for data in update_legalities.get(scryfall_id):
-                        #legalities_data.append(update_legalities.get(print_key) + [print_key])
             cursor.executemany(MTGPrint.insert_addl_data_sql,addl_data)
             #cursor.executemany(MTGPrint.legalities_update_sql,legalities_data)
 
@@ -179,10 +158,6 @@ def update_sets():
         while(MTGSet.hasNewData()):
             new_set_data = MTGSet.getNewBatch()
             cursor.executemany(MTGSet.insert_sql,new_set_data)
-
-            #id_sql = MTGSet.id_sql_start + ','.join(["%s"]*len(new_set_data)) + ")"
-            #cursor.execute(id_sql,[row[0] for row in new_set_data])
-            #MTGSet.updateIds(cursor.fetchall())
             
             conn.commit()
             logger.info("Sets Imported: %d" ,len(new_set_data))
@@ -286,17 +261,11 @@ def importCardCastle(file, date = datetime.now(), conn = None):
         import_time = datetime.now()
         file_key = DBConnection.getNextId()
         cursor.execute("INSERT INTO ImportFiles(id,name,type,imported_at) VALUES(%s,%s,%s,%s)",[file_key,file.replace("import/",""),"cardcastle",import_time])
-        #cursor.execute("SELECT id from ImportFiles where name=%s and type=%s",[file.replace("import/",""),"cardcastle"])
-        #file_key = cursor.fetchone()[0]
-        print_id_sql = "SELECT id,scryfall_id from Prints where scryfall_id in ("
-        print_id_sql += "%s,"*scryfall_ids_size
-        print_id_sql = print_id_sql[:-1] + ")"
+        print_id_sql = "SELECT id,scryfall_id from Prints where scryfall_id in (" + ','.join(["%s"]*len(scryfall_ids_size)) + ")"
         cursor.execute(print_id_sql,list(scryfall_ids))
         for p in cursor.fetchall():
             print_ids[p[1]]=p[0]
         for c in card_data:
-            #id = [print_ids[c[6]]]+c
-            #print(id)
             id = DBConnection.getNextId()
             import_data.append([id,print_ids[c[6]],file_key]+c)
         cursor.executemany("INSERT INTO Collection(id,print_key,file_key,card_name,set_name,card_condition,foil,language,multiverse_id,scryfall_id) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",import_data)
