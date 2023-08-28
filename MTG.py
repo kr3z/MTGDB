@@ -71,15 +71,7 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
             cursor.executemany(CardFace.insert_sql,CardFace.getBatchData())
             cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
             cursor.executemany(Legalities.insert_sql,Legalities.getBatchData())
-
-            addl_data = []
-            # TODO: This can be improved in getBatch since we already have print_key
-            for print_key in print_keys:
-                if new_addl_data.get(print_key):
-                    for data in new_addl_data.get(print_key):
-                        addl_data.append([print_key] + data)
-
-            cursor.executemany(MTGPrint.insert_addl_data_sql,addl_data)
+            cursor.executemany(MTGPrint.insert_addl_data_sql,new_addl_data)
 
             conn.commit()
             counts['NewPrints']+=len(new_print_data)
@@ -87,7 +79,6 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
 
         while(MTGPrint.hasUpdateData()):
             # TODO: update legalities instead of delete/re-insert
-            update_print_data, update_addl_data = MTGPrint.getUpdateBatch()
             update_print_data, update_print_addl_data, update_addl_data = MTGPrint.getUpdateBatch()
             cursor.executemany(MTGPrint.update_sql,update_print_data)
             cursor.executemany(MTGPrint.update_addl_sql,update_print_addl_data)
@@ -107,14 +98,7 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
             cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
             cursor.executemany(Legalities.insert_sql,Legalities.getBatchData())
             # cursor.executemany(Legalities.update_sql,Legalities.getBatchData())
-
-            addl_data = []
-            # TODO: This can be improved in getBatch since we already have print_key
-            for print_key in print_keys:
-                if update_addl_data.get(print_key):
-                    for data in update_addl_data.get(print_key):
-                        addl_data.append([print_key] + data)
-            cursor.executemany(MTGPrint.insert_addl_data_sql,addl_data)
+            cursor.executemany(MTGPrint.insert_addl_data_sql,update_addl_data)
             #cursor.executemany(MTGPrint.legalities_update_sql,legalities_data)
 
             conn.commit()
@@ -124,6 +108,9 @@ def import_card_data(data, data_date = datetime.now(),conn=None):
         # Update prices
         while(MTGPrice.hasData()):
             price_data = MTGPrice.getBatch()
+            print_keys = [row[1] for row in price_data]
+            update_latest_sql = MTGPrice.update_latest_sql + ','.join(["%s"]*len(print_keys)) + ")"
+            cursor.execute(update_latest_sql, print_keys)
             cursor.executemany(MTGPrice.insert_sql,price_data)
             conn.commit()
             counts['NewPrices']+=len(price_data)

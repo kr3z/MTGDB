@@ -142,10 +142,10 @@ class MTGPrint():
 
     insert_sql = "INSERT INTO Prints(card_key,set_key,scryfall_id,lang,oversized,layout,booster,border_color,card_back_id,collector_number,digital,frame,full_art,highres_image,image_status,promo,rarity,released_at,reprint,story_spotlight,textless,variation,arena_id,mtgo_id,mtgo_foil_id,tcgplayer_id,tcgplayer_etched_id,cardmarket_id,artist,content_warning,flavor_name,illustration_id,variation_of,security_stamp,watermark,preview_previewed_at,finish_nonfoil,finish_foil,finish_etched,game_paper,game_mtgo,game_arena,game_astral,game_sega,hash,update_time,id) VALUES (" + ','.join(["%s"]*47) + ')'
     insert_addl_sql = "INSERT INTO Prints_Additional(rulings_uri,scryfall_uri,uri,flavor_text,printed_name,printed_text,printed_type_line,preview_source_uri,preview_source,cardhoarder_purchase_uri,cardmarket_purchase_uri,tcgplayer_purchase_uri,edhrec_uri,gatherer_uri,tcgplayer_infinite_articles_uri,tcgplayer_infinite_decks_uri,id) VALUES (" + ','.join(["%s"]*17) + ')'
-    insert_addl_data_sql = "INSERT INTO AdditionalData(print_key,type,type2,value) VALUES (%s,%s,%s,%s)"
+    insert_addl_data_sql = "INSERT INTO AdditionalData(print_key,type,value) VALUES (%s,%s,%s)"
 
     update_sql = "UPDATE Prints SET card_key=%s,set_key=%s,scryfall_id=%s,lang=%s,oversized=%s,layout=%s,booster=%s,border_color=%s,card_back_id=%s,collector_number=%s,digital=%s,frame=%s,full_art=%s,highres_image=%s,image_status=%s,promo=%s,rarity=%s,released_at=%s,reprint=%s,story_spotlight=%s,textless=%s,variation=%s,arena_id=%s,mtgo_id=%s,mtgo_foil_id=%s,tcgplayer_id=%s,tcgplayer_etched_id=%s,cardmarket_id=%s,artist=%s,content_warning=%s,flavor_name=%s,illustration_id=%s,variation_of=%s,security_stamp=%s,watermark=%s,preview_previewed_at=%s,finish_nonfoil=%s,finish_foil=%s,finish_etched=%s,game_paper=%s,game_mtgo=%s,game_arena=%s,game_astral=%s,game_sega=%s,hash=%s,update_count=update_count+1,update_time=%s WHERE id=%s"
-    update_addl_sql = "UPDATE Prints SET rulings_uri=%s,scryfall_uri=%s,uri=%s,flavor_text=%s,printed_name=%s,printed_text=%s,printed_type_line=%s,preview_source_uri=%s,preview_source=%s,cardhoarder_purchase_uri=%s,cardmarket_purchase_uri=%s,tcgplayer_purchase_uri=%s,edhrec_uri=%s,gatherer_uri=%s,tcgplayer_infinite_articles_uri=%s,tcgplayer_infinite_decks_uri=%s WHERE id=%s"
+    update_addl_sql = "UPDATE Prints_Additional SET rulings_uri=%s,scryfall_uri=%s,uri=%s,flavor_text=%s,printed_name=%s,printed_text=%s,printed_type_line=%s,preview_source_uri=%s,preview_source=%s,cardhoarder_purchase_uri=%s,cardmarket_purchase_uri=%s,tcgplayer_purchase_uri=%s,edhrec_uri=%s,gatherer_uri=%s,tcgplayer_infinite_articles_uri=%s,tcgplayer_infinite_decks_uri=%s WHERE id=%s"
     addl_data_delete_sql_start = "DELETE FROM AdditionalData where print_key in ("
 
     id_map = {}
@@ -423,8 +423,7 @@ class MTGPrint():
     def getBatch(print_type):
         print_data = []
         addl_print_data = []
-        addl_data = {}
-        #legalities = {}
+        addl_data = []
 
         batch_prints = print_type[:BATCH_SIZE]
         del print_type[:BATCH_SIZE]
@@ -441,13 +440,11 @@ class MTGPrint():
             
             Legalities.addToBatch(print_key,prnt.getLegalities())
 
-            addl = []
             a = prnt.getAdditionalArrays()
             if len(a)>0:
                 for type in a:
                     for value in a[type]:
-                        addl.append([type, None, value])
-            addl_data[print_key] = addl
+                        addl_data.append([print_key, type, value])
 
 
         return print_data, addl_print_data, addl_data
@@ -457,7 +454,8 @@ class MTGPrice():
     existing_price_sql_start = "SELECT pr.print_key,max(pr.price_date) FROM Prices pr"
     existing_price_sql_mid = ", Prints p, Sets s WHERE pr.print_key = p.id and p.set_key = s.id and s.scryfall_id = %s"
     existing_price_sql_end = " GROUP BY pr.print_key"
-    insert_sql = "INSERT INTO Prices(id,print_key,price_date,usd,usd_foil,usd_etched,eur,eur_foil,tix) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+    insert_sql = "INSERT INTO Prices(id,print_key,price_date,usd,usd_foil,usd_etched,eur,eur_foil,tix,is_latest) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,1)"
+    update_latest_sql = "UPDATE Prices SET is_latest=0 where is_latest=1 and print_key in ("
 
     _date_map = {}
     _cached_sets = set()
