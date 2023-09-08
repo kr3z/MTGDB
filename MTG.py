@@ -5,6 +5,7 @@ import argparse
 import traceback
 import logging
 import logging.config
+import concurrent.futures
 from datetime import datetime
 from DB import DBConnection
 from Scryfall import scryfall_api_request, scryfall_request
@@ -17,6 +18,9 @@ logger = logging.getLogger('MTG')
 
 BATCH_SIZE= 1000
 SET_PERIOD_DAYS = 3
+PERSIST_THREADS = 3
+
+persist_pool =  concurrent.futures.ThreadPoolExecutor(max_workers=PERSIST_THREADS, thread_name_prefix='DataPersister')
 
 #TODO: desc
 desc = """
@@ -29,16 +33,28 @@ parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('action', choices=['import_files','update_sets','update_cards'])
 args = parser.parse_args()
 
-#def import_card_data(data, data_date = datetime.now(),conn=None): 
+def persist_data(sql: str, data: list) -> None:
+    conn = None
+    try:
+        conn = DBConnection.getConnection()
+        conn.executemany(sql,data)
+        conn.commit()
+    except Exception as error:
+        logger.error(error)
+        traceback.print_exc()
+        if conn is not None:
+            conn.rollback()
+
+#def import_card_data(data, data_date = datetime.now(),conn=None):    
 def import_card_data(data=None, data_date = datetime.now(),conn=None):   
     if data is not None:
         for p in data:
             prnt = MTGPrint(p,data_date = data_date)
-            card = MTGCard(p,data_date = data_date)   
+            card = MTGCard(p,data_date = data_date)
 
     # TODO: Log counts of parsed objects
     #logger.info("New Prints: %d New Cards: %d" ,len(new_prints),len(new_cards))
-    #logger.info("Updated Prints: %d Updated Cards: %d" ,len(update_prints),len(update_cards))
+    #logger.info("Updated Prints: %d Updated Cards: %d" ,len(update_prints),len(update_cards)) 
 
     counts = {'NewCards': 0, 'UpdatedCards': 0, 'NewPrints': 0, 'UpdatedPrints': 0, 'NewRelatedCard': 0, 'UpdatedRelatedCard': 0, 'NewLegalities': 0, 'UpdatedLegalities': 0, 'NewPrices': 0}
 
@@ -162,12 +178,37 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
 
 def update_sets():
     set_data = scryfall_api_request('sets')
-    sets = []
+    new_sets = []
+    update_sets = []
     for s in set_data:
-        sets.append(MTGSet(s))
-    logger.info("Total sets retrieved from scryfall: %d" ,len(sets))
+        mtg_set = MTGSet.parseSet(s)
+        if not mtg_set.exists():
+            new_sets.append(mtg_set)
+        elif mtg_set.needsUpdate():
+            update_sets.append(mtg_set)
+    logger.debug("Total sets retrieved from scryfall: %d" ,len(set_data))
 
-    conn = None
+    while new_sets:
+        batch_sets = new_sets[:BATCH_SIZE]
+        del new_sets[:BATCH_SIZE]
+
+        new_data = []
+        for s in batch_sets:
+            new_data.append(s.getPersistData() + [s.getSetTypeKey(),s.getMD5(), s.getId()])
+        persist_pool.submit(persist_data,MTGSet.insert_sql,new_data)
+        logger.debug("Submitted new set batch with size: %d", len(new_data))
+
+    while update_sets:
+        batch_sets = update_sets[:BATCH_SIZE]
+        del update_sets[:BATCH_SIZE]
+
+        update_data = []
+        for s in batch_sets:
+            update_data.append(s.getPersistData() + [s.getSetTypeKey(),s.getMD5(), s.getId()])
+        persist_pool.submit(persist_data,MTGSet.update_sql,update_data)
+        logger.debug("Submitted update set batch with size: %d", len(update_data))
+
+    """ conn = None
     cursor = None
     try:
         conn = DBConnection()
@@ -193,7 +234,7 @@ def update_sets():
             conn.rollback()
     finally:
         if conn is not None:
-            conn.close()
+            conn.close() """
     
 def update_cards_by_set(scryfall_id):
     last_update_time_sql = ("SELECT GREATEST(MAX(p.update_time),IFNULL(MAX(l.update_time),str_to_date('01-01-1970','%m-%d-%Y')),IFNULL(MAX(rc.update_time),str_to_date('01-01-1970','%m-%d-%Y')),IFNULL(MAX(pr.price_date),str_to_date('01-01-1970','%m-%d-%Y'))) "
@@ -389,7 +430,6 @@ def importFiles():
                 #data = json.load(f)
                 #success = import_card_data(data,data_date=f_date,conn=conn)
                 success = import_card_data(data_date=f_date,conn=conn)
-
 
                 if success:
                     id = DBConnection.getNextId()

@@ -89,6 +89,12 @@ class MTGSet(MTGPersistable):
     def __init__(self,data, data_date = None):
         self.data_date = data_date if data_date else datetime.now()
         self.uuid = data.get('id')
+    @classmethod
+    def parseSet(cls,data: dict) -> 'MTGSet':
+        return MTGSet(data)
+
+    def __init__(self,data):
+        self.scryfall_id = data.get('id')
         self.code = data.get('code')
         self.name = data.get('name')
         self.set_type = data.get('set_type')
@@ -110,18 +116,19 @@ class MTGSet(MTGPersistable):
         self.printed_size = data.get('printed_size')
 
         self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
+        self._set_type_key : int = MTGSet._set_types.get(self.set_type)
 
         self._exists : bool = self.uuid in self.__class__._id_map
         self._needs_update : bool = False
 
         if not self.exists():
-            logger.info("%s not found in DB. Persisting" ,self.name)
-            self.__class__._new_data.append(self)
-            self.__class__._id_map[self.uuid] = DBConnection.getNextId()
+            logger.debug("%s not found in DB. Persisting" ,self.name)
+            MTGSet._id_map[self.scryfall_id] = DBConnection.getNextId()
+            #MTGSet._new_sets.append(self)
         elif self._md5 not in self.__class__._hashes and self.data_date > self.__class__._date_map[self.uuid]:
-            logger.info("%s needs updating" ,self.name)
-            self.__class__._update_data.append(self)
+            logger.debug("%s needs updating" ,self.name)
             self._needs_update = True
+            #MTGSet._update_sets.append(self)
             
 
         self._id = self.__class__._id_map.get(self.uuid)
@@ -171,6 +178,13 @@ class MTGPrint(MTGPersistable):
     
     _new_data = []
     _update_data = []
+
+    @classmethod
+    def parseData(cls,data, data_date = datetime.now()):
+        prnt = MTGPrint(data,data_date=data_date)
+        card = MTGCard(data,data_date=data_date)
+        return prnt, card
+
 
     def __init__(self,data, data_date = None):
         self.data_date = data_date if data_date else datetime.now()
@@ -302,7 +316,8 @@ class MTGPrint(MTGPersistable):
 
         # Cache prints for this set if not already done
         if self.set_scryfall_id not in MTGPrint._cached_sets:
-            result = DBConnection.singleQuery(MTGPrint.existing_sql,[self.set_scryfall_id,self.set_scryfall_id,self.set_scryfall_id,self.set_scryfall_id])
+            conn = DBConnection.getConnection()
+            result = conn.execute(MTGPrint.existing_sql,[self.set_scryfall_id,self.set_scryfall_id,self.set_scryfall_id,self.set_scryfall_id])
             # TODO: Add error logging if we get no results
             for p in result:
                 MTGPrint.id_map[p[1]]=p[0]
@@ -314,10 +329,10 @@ class MTGPrint(MTGPersistable):
             MTGPrint._cached_sets.add(self.set_scryfall_id)
 
         if not self.exists():
-            MTGPrint._new_data.append(self)
+            #MTGPrint._new_prints.append(self)
             MTGPrint.id_map[self.scryfall_id] = DBConnection.getNextId()
-        elif self.needsUpdate():
-            MTGPrint._update_data.append(self)
+        #elif self.needsUpdate():
+            #MTGPrint._update_prints.append(self)
 
         self.id = MTGPrint.id_map.get(self.scryfall_id)
         MTGPrint.hashes.add(self.getMD5())
@@ -339,10 +354,10 @@ class MTGPrint(MTGPersistable):
         self.legalities = Legalities(data.get('legalities'),self.scryfall_id,self.data_date)
 
     def exists(self):
-        return self.scryfall_id in MTGPrint.id_map
+        return self.scryfall_id in self.__class__.id_map
     
     def needsUpdate(self):
-        return self.exists() and self.getMD5() not in MTGPrint.hashes and self.data_date > MTGPrint.date_map[self.scryfall_id]
+        return self.exists() and self.getMD5() not in self.__class__.hashes and self.data_date > self.__class__.date_map[self.scryfall_id]
     
     def getId(self):
         return self.id
@@ -481,7 +496,8 @@ class MTGPrice():
                     binds = [set_scryfall_id]
                     existing_sql += MTGPrice.existing_price_sql_mid
                 existing_sql += MTGPrice.existing_price_sql_end
-                result = DBConnection.singleQuery(existing_sql,binds)
+                conn = DBConnection.getConnection()
+                result = conn.execute(existing_sql,binds)
                 for p in result:
                     MTGPrice._date_map[p[0]]=p[1]
                 MTGPrice._cached_sets.add(set_scryfall_id)
