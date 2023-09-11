@@ -10,7 +10,9 @@ from DB import DBConnection
 from Scryfall import scryfall_api_request, scryfall_request
 from MTGClasses import MTGPrint, MTGCard, MTGSet, MTGPrice, CardFace, RelatedCard, Legalities
 
-logging.config.fileConfig('logging.conf')
+WORKING_DIR = os.path.dirname(os.path.realpath(__file__))
+
+logging.config.fileConfig(WORKING_DIR+os.sep+'logging.conf')
 logger = logging.getLogger('MTG')
 
 BATCH_SIZE= 1000
@@ -233,7 +235,6 @@ def importCardCastle(file, date = datetime.now(), conn = None):
 
 
     card_data_size = len(card_data)
-    scryfall_ids_size = len(scryfall_ids)
     if card_data_size != line_count-1:
         raise Exception("Read wrong number of cards")
     
@@ -248,7 +249,7 @@ def importCardCastle(file, date = datetime.now(), conn = None):
         import_time = datetime.now()
         file_key = DBConnection.getNextId()
         cursor.execute("INSERT INTO ImportFiles(id,name,type,imported_at) VALUES(%s,%s,%s,%s)",[file_key,file.replace("import/",""),"cardcastle",import_time])
-        print_id_sql = "SELECT id,scryfall_id from Prints where scryfall_id in (" + ','.join(["%s"]*len(scryfall_ids_size)) + ")"
+        print_id_sql = "SELECT id,scryfall_id from Prints where scryfall_id in (" + ','.join(["%s"]*len(scryfall_ids)) + ")"
         cursor.execute(print_id_sql,list(scryfall_ids))
         for p in cursor.fetchall():
             print_ids[p[1]]=p[0]
@@ -280,8 +281,8 @@ def importFiles():
     if res is not None:
         for f in res:
             imported_files.add(f[0])
-    files = os.listdir("import")
-    files = [f for f in files if os.path.isfile("import/"+f)]
+    files = os.listdir(WORKING_DIR+os.sep+"import")
+    files = [f for f in files if os.path.isfile(WORKING_DIR+os.sep+"import/"+f)]
     json_files = [f for f in files if f.endswith(".json")]
     csv_files = [f for f in files if f.endswith(".csv")]
 
@@ -323,7 +324,7 @@ def importFiles():
         conn = DBConnection()
         cursor = conn.getCursor()
         for file,v in scryfall_data.items():
-            with open("import/"+file) as f:
+            with open(WORKING_DIR+os.sep+"import/"+file) as f:
                 f_type = v[0]
                 f_date = v[1]
                 data = json.load(f)
@@ -333,7 +334,7 @@ def importFiles():
                     cursor.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
                     conn.commit()
         for file,v in scryfall_rulings.items():
-            with open("import/"+file) as f:
+            with open(WORKING_DIR+os.sep+"import/"+file) as f:
                 f_type = v[0]
                 f_date = v[1]
                 data = json.load(f)
@@ -345,7 +346,7 @@ def importFiles():
         for file,v in cardcastle_data.items():
             f_type = v[0]
             f_date = v[1]
-            importCardCastle("import/"+file,date=f_date,conn=conn)
+            importCardCastle(WORKING_DIR+os.sep+"import/"+file,date=f_date,conn=conn)
 
     except Exception as error:
         print(error)

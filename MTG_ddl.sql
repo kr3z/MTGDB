@@ -132,6 +132,7 @@ CREATE TABLE `Prices` (
   `eur` decimal(9,2) DEFAULT NULL,
   `eur_foil` decimal(9,2) DEFAULT NULL,
   `tix` decimal(9,2) DEFAULT NULL,
+  `is_latest` tinyint(4) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `ix_print_key` (`print_key`)
   KEY `ix_Prices_price_date` (`price_date`),

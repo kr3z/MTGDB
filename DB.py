@@ -1,9 +1,12 @@
 import configparser
 import mysql.connector
 import traceback
+import os
+
+WORKING_DIR = os.path.dirname(os.path.realpath(__file__))
 
 config = configparser.ConfigParser()
-config.read('db.properties')
+config.read(WORKING_DIR+os.sep+'db.properties')
 
 db_host=config.get("db", "db_host")
 db_name=config.get("db", "db_name")

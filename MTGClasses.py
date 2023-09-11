@@ -3,7 +3,6 @@ import logging
 from datetime import datetime
 from DB import DBConnection
 
-logging.config.fileConfig('logging.conf')
 logger = logging.getLogger('MTG')
 
 BATCH_SIZE = 1000
