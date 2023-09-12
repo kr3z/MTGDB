@@ -28,10 +28,12 @@ parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('action', choices=['import_files','update_sets','update_cards'])
 args = parser.parse_args()
 
-def import_card_data(data, data_date = datetime.now(),conn=None):    
-    for p in data:
-        prnt = MTGPrint(p,data_date = data_date)
-        card = MTGCard(p,data_date = data_date)
+#def import_card_data(data, data_date = datetime.now(),conn=None): 
+def import_card_data(data=None, data_date = datetime.now(),conn=None):   
+    if data is not None:
+        for p in data:
+            prnt = MTGPrint(p,data_date = data_date)
+            card = MTGCard(p,data_date = data_date)   
 
     # TODO: Log counts of parsed objects
     #logger.info("New Prints: %d New Cards: %d" ,len(new_prints),len(new_cards))
@@ -176,7 +178,11 @@ def update_cards_by_set(scryfall_id):
         set_data = scryfall_request(search_uri)
         if set_data is not None and len(set_data)>0:
             logger.debug("Retrieved %d cards from URI: %s", len(set_data),search_uri)
-            ret = import_card_data(set_data)
+
+            for p in set_data:
+                MTGPrint(p)
+                MTGCard(p)
+            ret = import_card_data()
         else:
             logger.error("No data returned from Set search URI: %s", search_uri)
     else:
@@ -327,8 +333,24 @@ def importFiles():
             with open(WORKING_DIR+os.sep+"import/"+file) as f:
                 f_type = v[0]
                 f_date = v[1]
-                data = json.load(f)
-                success = import_card_data(data,data_date=f_date,conn=conn)
+
+                # Read and process line by line so we don't have to read the entire file into memory
+                for json_line in f:
+                    json_line = json_line.strip()
+                    if json_line[0] != '{':
+                        continue
+                    if json_line[-1]==',':
+                        json_line = json_line[:-1]
+ 
+                    data = json.loads(json_line)
+                    MTGPrint(data,data_date = f_date)
+                    MTGCard(data,data_date = f_date)
+
+                #data = json.load(f)
+                #success = import_card_data(data,data_date=f_date,conn=conn)
+                success = import_card_data(data_date=f_date,conn=conn)
+
+
                 if success:
                     id = DBConnection.getNextId()
                     cursor.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
