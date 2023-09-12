@@ -248,7 +248,7 @@ def importCardCastle(file, date = datetime.now(), conn = None):
         cursor = conn.getCursor()
         import_time = datetime.now()
         file_key = DBConnection.getNextId()
-        cursor.execute("INSERT INTO ImportFiles(id,name,type,imported_at) VALUES(%s,%s,%s,%s)",[file_key,file.replace("import/",""),"cardcastle",import_time])
+        cursor.execute("INSERT INTO ImportFiles(id,name,type,imported_at) VALUES(%s,%s,%s,%s)",[file_key,file.replace(WORKING_DIR+os.sep+"import/",""),"cardcastle",import_time])
         print_id_sql = "SELECT id,scryfall_id from Prints where scryfall_id in (" + ','.join(["%s"]*len(scryfall_ids)) + ")"
         cursor.execute(print_id_sql,list(scryfall_ids))
         for p in cursor.fetchall():
