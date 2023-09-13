@@ -901,11 +901,11 @@ class MTGCard(MTGPersistable):
         self._needs_update : bool = False
 
         if not self.exists():
-            self.__class__._new_data.append(self)
+            #MTGCard._new_cards.append(self)
             self.__class__._id_map[self.card_id] = DBConnection.getNextId()
         elif self._md5 not in self.__class__._hashes and self.data_date > self.__class__._date_map[self.card_id]:
-            self.__class__._update_data.append(self)
             self._needs_update = True
+            #MTGCard._update_cards.append(self)
         
         self._id = self.__class__._id_map.get(self.card_id)
         self.__class__._hashes.add(self._md5)

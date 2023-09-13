@@ -33,6 +33,28 @@ parser = argparse.ArgumentParser(description=desc)
 parser.add_argument('action', choices=['import_files','update_sets','update_cards'])
 args = parser.parse_args()
 
+class DataQueue:
+    def __init__(self, pool: concurrent.futures.Executor, func, sql: str, batch_size : int = BATCH_SIZE):
+        self._data = []
+        self._pool = pool
+        self._func = func
+        self._sql = sql
+        self._batch_size = batch_size
+
+    def submit(self) -> None:
+        self._pool.submit(self._func,self._sql,self._data)
+        logger.debug("Submitted batch with size: %d", len(self._data))
+        self._data = []
+
+    def add(self,data: list) -> None:
+        self._data.append(data)
+        if len(self._data) == self._batch_size:
+            self.submit()
+
+    def close(self) -> None:
+        if self._data:
+            self.submit()
+
 def persist_data(sql: str, data: list) -> None:
     conn = None
     try:
@@ -65,7 +87,7 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
             conn = DBConnection()
         cursor = conn.getCursor()
 
-        while(MTGCard.hasNewData()):
+        """ while(MTGCard.hasNewData()):
             new_card_data = MTGCard.getNewBatch()
             cursor.executemany(MTGCard.insert_sql,new_card_data)
 
@@ -78,7 +100,7 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
             cursor.executemany(MTGCard.update_sql,update_card_data)
             conn.commit()
             counts['UpdatedCards']+=len(update_card_data)
-            logger.info("Cards Updated: %d" ,counts['UpdatedCards'])
+            logger.info("Cards Updated: %d" ,counts['UpdatedCards']) """
 
 
         # TODO: COnsilidate new and update blocks
@@ -178,63 +200,29 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
 
 def update_sets():
     set_data = scryfall_api_request('sets')
-    new_sets = []
-    update_sets = []
-    for s in set_data:
-        mtg_set = MTGSet.parseSet(s)
-        if not mtg_set.exists():
-            new_sets.append(mtg_set)
-        elif mtg_set.needsUpdate():
-            update_sets.append(mtg_set)
     logger.debug("Total sets retrieved from scryfall: %d" ,len(set_data))
 
-    while new_sets:
-        batch_sets = new_sets[:BATCH_SIZE]
-        del new_sets[:BATCH_SIZE]
+    new_data = DataQueue(persist_pool,persist_data,MTGSet.insert_sql,BATCH_SIZE)
+    update_data = DataQueue(persist_pool,persist_data,MTGSet.insert_sql,BATCH_SIZE)
+    while set_data:
+        mtg_set = MTGSet.parseSet(set_data.pop(0))
+        if not mtg_set.exists():
+            new_data.add(mtg_set.getPersistData() + [mtg_set.getSetTypeKey(),mtg_set.getMD5(), mtg_set.getId()])
+        elif mtg_set.needsUpdate():
+            update_data.add(mtg_set.getPersistData() + [mtg_set.getSetTypeKey(),mtg_set.getMD5(), mtg_set.getId()])
 
-        new_data = []
-        for s in batch_sets:
-            new_data.append(s.getPersistData() + [s.getSetTypeKey(),s.getMD5(), s.getId()])
-        persist_pool.submit(persist_data,MTGSet.insert_sql,new_data)
-        logger.debug("Submitted new set batch with size: %d", len(new_data))
+        """ if len(new_data) == BATCH_SIZE or not set_data and new_data:
+            persist_pool.submit(persist_data,MTGSet.insert_sql,new_data)
+            logger.debug("Submitted new set batch with size: %d", len(new_data))
+            new_data = []
+        if len(update_data) == BATCH_SIZE or not set_data and update_data:
+            persist_pool.submit(persist_data,MTGSet.update_sql,update_data)
+            logger.debug("Submitted update set batch with size: %d", len(update_data))
+            update_data = [] """
+    new_data.close()
+    update_data.close()
 
-    while update_sets:
-        batch_sets = update_sets[:BATCH_SIZE]
-        del update_sets[:BATCH_SIZE]
-
-        update_data = []
-        for s in batch_sets:
-            update_data.append(s.getPersistData() + [s.getSetTypeKey(),s.getMD5(), s.getId()])
-        persist_pool.submit(persist_data,MTGSet.update_sql,update_data)
-        logger.debug("Submitted update set batch with size: %d", len(update_data))
-
-    """ conn = None
-    cursor = None
-    try:
-        conn = DBConnection()
-        cursor = conn.getCursor()
-                
-        while(MTGSet.hasNewData()):
-            new_set_data = MTGSet.getNewBatch()
-            cursor.executemany(MTGSet.insert_sql,new_set_data)
-            
-            conn.commit()
-            logger.info("Sets Imported: %d" ,len(new_set_data))
-
-        while(MTGSet.hasUpdateData()):
-            update_set_data = MTGSet.getUpdateBatch()
-            cursor.executemany(MTGSet.update_sql,update_set_data)
-            conn.commit()
-            logger.info("Sets Updated: %d" ,len(update_set_data))
-
-    except Exception as error:
-        print(error)
-        traceback.print_exc()
-        if conn is not None:
-            conn.rollback()
-    finally:
-        if conn is not None:
-            conn.close() """
+    logger.debug("All Set batches submitted")
     
 def update_cards_by_set(scryfall_id):
     last_update_time_sql = ("SELECT GREATEST(MAX(p.update_time),IFNULL(MAX(l.update_time),str_to_date('01-01-1970','%m-%d-%Y')),IFNULL(MAX(rc.update_time),str_to_date('01-01-1970','%m-%d-%Y')),IFNULL(MAX(pr.price_date),str_to_date('01-01-1970','%m-%d-%Y'))) "
@@ -243,8 +231,9 @@ def update_cards_by_set(scryfall_id):
                             "LEFT JOIN RelatedCards rc on rc.print_key=p.id "
                             "LEFT JOIN Prices pr on pr.print_key=p.id and pr.is_latest=1 "
                             "WHERE p.set_key = %s")
+    conn = DBConnection.getConnection()
     ret = None
-    res = DBConnection.singleQuery("SELECT search_uri FROM Sets where scryfall_id = %s",[scryfall_id])
+    res = conn.execute("SELECT search_uri FROM Sets where scryfall_id = %s",[scryfall_id])
     if res is not None:
         last_update = None
         last_update_res = DBConnection.singleQuery(last_update_time_sql,[MTGSet.getSetKey(scryfall_id)])
@@ -279,7 +268,8 @@ def update_all_cards_and_sets():
     total_prices_added = 0
     logger.info("Performing full update")
     update_sets()
-    res = DBConnection.singleQuery("SELECT name,scryfall_id FROM Sets WHERE card_count>0")
+    conn = DBConnection.getConnection()
+    res = conn.execute("SELECT name,scryfall_id FROM Sets WHERE card_count>0")
     if res is not None:
         for name,scryfall_id in res:
             logger.info("Updating Set: %s", name)
@@ -364,7 +354,8 @@ def importFiles():
     scryfall_data = {}
     scryfall_rulings = {}
     cardcastle_data = {}
-    res = DBConnection.singleQuery("SELECT name From ImportFiles")
+    conn = DBConnection.getConnection()
+    res = conn.execute("SELECT name From ImportFiles")
     if res is not None:
         for f in res:
             imported_files.add(f[0])
@@ -408,12 +399,15 @@ def importFiles():
     conn = None
     import_sql = "INSERT INTO ImportFiles(id,name,type,imported_at) VALUES(%s,%s,%s,%s)"
     try:
-        conn = DBConnection()
-        cursor = conn.getCursor()
+        conn = DBConnection.getConnection()
+        #cursor = conn.getCursor()
         for file,v in scryfall_data.items():
             with open(WORKING_DIR+os.sep+"import/"+file) as f:
                 f_type = v[0]
                 f_date = v[1]
+
+                new_card_data = DataQueue(persist_pool,persist_data,MTGCard.insert_sql,BATCH_SIZE)
+                update_card_data = DataQueue(persist_pool,persist_data,MTGCard.update_sql,BATCH_SIZE)
 
                 # Read and process line by line so we don't have to read the entire file into memory
                 for json_line in f:
@@ -425,7 +419,32 @@ def importFiles():
  
                     data = json.loads(json_line)
                     MTGPrint(data,data_date = f_date)
-                    MTGCard(data,data_date = f_date)
+                    card = MTGCard(data,data_date = f_date)
+
+                    if not card.exists():
+                        new_card_data.add(card.getPersistData() + [card.getMD5(),card.getDate(),card.getId()])
+                    elif card.needsUpdate():
+                        update_card_data.add(card.getPersistData() + [card.getMD5(),card.getDate(),card.getId()])
+
+                    """ if len(new_card_data) == BATCH_SIZE:
+                        persist_pool.submit(persist_data,MTGCard.insert_sql,new_card_data)
+                        logger.debug("Submitted new Card batch with size: %d", len(new_card_data))
+                        new_card_data = []
+                    if len(update_card_data) == BATCH_SIZE:
+                        persist_pool.submit(persist_data,MTGCard.update_sql,update_card_data)
+                        logger.debug("Submitted update Card batch with size: %d", len(update_card_data))
+                        update_card_data = [] """
+
+                """ if new_card_data:
+                    persist_pool.submit(persist_data,MTGCard.insert_sql,new_card_data)
+                    logger.debug("Submitted new Card batch with size: %d", len(new_card_data))
+                    new_card_data = []
+                if update_card_data:
+                    persist_pool.submit(persist_data,MTGCard.update_sql,update_card_data)
+                    logger.debug("Submitted update Card batch with size: %d", len(update_card_data))
+                    update_card_data = [] """
+                new_card_data.close()
+                update_card_data.close()
 
                 #data = json.load(f)
                 #success = import_card_data(data,data_date=f_date,conn=conn)
@@ -433,7 +452,7 @@ def importFiles():
 
                 if success:
                     id = DBConnection.getNextId()
-                    cursor.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
+                    conn.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
                     conn.commit()
         for file,v in scryfall_rulings.items():
             with open(WORKING_DIR+os.sep+"import/"+file) as f:
@@ -443,7 +462,7 @@ def importFiles():
                 success = import_ruling_data(data,date=f_date,conn=conn)
                 if success:
                     id = DBConnection.getNextId()
-                    cursor.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
+                    conn.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
                     conn.commit()
         for file,v in cardcastle_data.items():
             f_type = v[0]
