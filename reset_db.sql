@@ -9,4 +9,6 @@ truncate table `Cards`;
 truncate table `Prices`;
 truncate table `Collection`;
 truncate table `CardFaces`;
+truncate table `PrintAttributes`;
+truncate table `PrintAttributeLink`;
 alter sequence`id_seq` restart 1;

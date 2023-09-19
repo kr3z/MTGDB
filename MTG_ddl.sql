@@ -1,16 +1,5 @@
 CREATE SEQUENCE `id_seq` start with 1 minvalue 1 maxvalue 9223372036854775806 increment by 100 cache 1000 nocycle ENGINE=InnoDB;
 
-CREATE TABLE `AdditionalData` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `print_key` int(11) NOT NULL,
-  `type` varchar(200) COLLATE latin1_general_ci NOT NULL,
-  `type2` varchar(200) COLLATE latin1_general_ci DEFAULT NULL,
-  `value` varchar(600) COLLATE latin1_general_ci NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `ix_print_key` (`print_key`),
-  KEY `ix_type` (`type`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
-
 CREATE TABLE `CardFaces` (
   `id` int(11) NOT NULL,
   `print_key` int(11) NOT NULL,
@@ -97,30 +86,30 @@ CREATE TABLE `ImportFiles` (
 CREATE TABLE `Legalities` (
   `id` int(11) NOT NULL,
   `print_key` int(11) NOT NULL,
-  `standard` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `future` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `historic` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `gladiator` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `pioneer` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `explorer` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `modern` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `legacy` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `pauper` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `vintage` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `penny` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `commander` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `oathbreaker` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `brawl` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `historicbrawl` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `alchemy` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `paupercommander` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `duel` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `oldschool` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `premodern` varchar(10) COLLATE latin1_general_ci NOT NULL,
-  `predh` varchar(10) COLLATE latin1_general_ci NOT NULL,
+  `standard` tinyint NOT NULL,
+  `future` tinyint NOT NULL,
+  `historic` tinyint NOT NULL,
+  `gladiator` tinyint NOT NULL,
+  `pioneer` tinyint NOT NULL,
+  `explorer` tinyint NOT NULL,
+  `modern` tinyint NOT NULL,
+  `legacy` tinyint NOT NULL,
+  `pauper` tinyint NOT NULL,
+  `vintage` tinyint NOT NULL,
+  `penny` tinyint NOT NULL,
+  `commander` tinyint NOT NULL,
+  `oathbreaker` tinyint NOT NULL,
+  `brawl` tinyint NOT NULL,
+  `historicbrawl` tinyint NOT NULL,
+  `alchemy` tinyint NOT NULL,
+  `paupercommander` tinyint NOT NULL,
+  `duel` tinyint NOT NULL,
+  `oldschool` tinyint NOT NULL,
+  `premodern` tinyint NOT NULL,
+  `predh` tinyint NOT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_print_key` (`print_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci COMMENT='legal = 1, not_legal = 2, restricted = 3, banned = 4';
 
 CREATE TABLE `Prices` (
   `id` int(11) NOT NULL,
@@ -134,8 +123,8 @@ CREATE TABLE `Prices` (
   `tix` decimal(9,2) DEFAULT NULL,
   `is_latest` tinyint(4) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
-  KEY `ix_print_key` (`print_key`)
-  KEY `ix_Prices_price_date` (`price_date`),
+  KEY `ix_print_key` (`print_key`),
+  KEY `ix_Prices_price_date` (`price_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
 
 CREATE TABLE `Prints` (
@@ -184,6 +173,8 @@ CREATE TABLE `Prints` (
   `game_arena` tinyint(1) NOT NULL,
   `game_astral` tinyint(1) NOT NULL,
   `game_sega` tinyint(1) NOT NULL,
+  `multiverse_id` int (11) DEFAULT NULL,
+  `multiverse_id_2` int (11) DEFAULT NULL,
   `hash` varchar(200) NOT NULL,
   `update_count` int(11) NOT NULL DEFAULT 0,
   `update_time` datetime NOT NULL DEFAULT current_timestamp(),
@@ -225,6 +216,23 @@ CREATE TABLE `RelatedCards` (
   `uri` varchar(200) COLLATE latin1_general_ci NOT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_print_key` (`print_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
+
+CREATE TABLE `PrintAttributes` (
+  `id` int(11) NOT NULL,
+  `attribute_type` int(11) NOT NULL COMMENT '''keyword'': 1, ''promo_type'': 2, ''frame_effects'': 3, ''attraction_lights'': 4',
+  `attribute` varchar(200) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ix_PrintAttributes_attribute_type` (`attribute_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
+
+CREATE TABLE `PrintAttributeLink` (
+  `id` int(11) NOT NULL,
+  `attribute_key` int(11) NOT NULL,
+  `print_key` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ix_attrlink_attrkey` (`attribute_key`),
+  KEY `ix_attrlink_printkey` (`print_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
 
 CREATE TABLE `SetTypes` (

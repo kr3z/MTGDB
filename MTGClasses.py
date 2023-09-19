@@ -159,11 +159,11 @@ class MTGPrint(MTGPersistable):
                     "SELECT p.id,p.scryfall_id,p.hash,p.update_time,s.scryfall_id FROM Prints p , Sets s "
                     "WHERE p.set_key = s.id and s.parent_set_code is null and s.scryfall_id = %s")
 
-    insert_sql = "INSERT INTO Prints(card_key,set_key,scryfall_id,lang,oversized,layout,booster,border_color,card_back_id,collector_number,digital,frame,full_art,highres_image,image_status,promo,rarity,released_at,reprint,story_spotlight,textless,variation,arena_id,mtgo_id,mtgo_foil_id,tcgplayer_id,tcgplayer_etched_id,cardmarket_id,artist,content_warning,flavor_name,illustration_id,variation_of,security_stamp,watermark,preview_previewed_at,finish_nonfoil,finish_foil,finish_etched,game_paper,game_mtgo,game_arena,game_astral,game_sega,hash,update_time,id) VALUES (" + ','.join(["%s"]*47) + ')'
+    insert_sql = "INSERT INTO Prints(card_key,set_key,scryfall_id,lang,oversized,layout,booster,border_color,card_back_id,collector_number,digital,frame,full_art,highres_image,image_status,promo,rarity,released_at,reprint,story_spotlight,textless,variation,arena_id,mtgo_id,mtgo_foil_id,tcgplayer_id,tcgplayer_etched_id,cardmarket_id,artist,content_warning,flavor_name,illustration_id,variation_of,security_stamp,watermark,preview_previewed_at,finish_nonfoil,finish_foil,finish_etched,game_paper,game_mtgo,game_arena,game_astral,game_sega,multiverse_id,multiverse_id_2,hash,update_time,id) VALUES (" + ','.join(["%s"]*49) + ')'
     insert_addl_sql = "INSERT INTO Prints_Additional(rulings_uri,scryfall_uri,uri,flavor_text,printed_name,printed_text,printed_type_line,preview_source_uri,preview_source,cardhoarder_purchase_uri,cardmarket_purchase_uri,tcgplayer_purchase_uri,edhrec_uri,gatherer_uri,tcgplayer_infinite_articles_uri,tcgplayer_infinite_decks_uri,id) VALUES (" + ','.join(["%s"]*17) + ')'
     insert_addl_data_sql = "INSERT INTO AdditionalData(print_key,type,value) VALUES (%s,%s,%s)"
 
-    update_sql = "UPDATE Prints SET card_key=%s,set_key=%s,scryfall_id=%s,lang=%s,oversized=%s,layout=%s,booster=%s,border_color=%s,card_back_id=%s,collector_number=%s,digital=%s,frame=%s,full_art=%s,highres_image=%s,image_status=%s,promo=%s,rarity=%s,released_at=%s,reprint=%s,story_spotlight=%s,textless=%s,variation=%s,arena_id=%s,mtgo_id=%s,mtgo_foil_id=%s,tcgplayer_id=%s,tcgplayer_etched_id=%s,cardmarket_id=%s,artist=%s,content_warning=%s,flavor_name=%s,illustration_id=%s,variation_of=%s,security_stamp=%s,watermark=%s,preview_previewed_at=%s,finish_nonfoil=%s,finish_foil=%s,finish_etched=%s,game_paper=%s,game_mtgo=%s,game_arena=%s,game_astral=%s,game_sega=%s,hash=%s,update_count=update_count+1,update_time=%s WHERE id=%s"
+    update_sql = "UPDATE Prints SET card_key=%s,set_key=%s,scryfall_id=%s,lang=%s,oversized=%s,layout=%s,booster=%s,border_color=%s,card_back_id=%s,collector_number=%s,digital=%s,frame=%s,full_art=%s,highres_image=%s,image_status=%s,promo=%s,rarity=%s,released_at=%s,reprint=%s,story_spotlight=%s,textless=%s,variation=%s,arena_id=%s,mtgo_id=%s,mtgo_foil_id=%s,tcgplayer_id=%s,tcgplayer_etched_id=%s,cardmarket_id=%s,artist=%s,content_warning=%s,flavor_name=%s,illustration_id=%s,variation_of=%s,security_stamp=%s,watermark=%s,preview_previewed_at=%s,finish_nonfoil=%s,finish_foil=%s,finish_etched=%s,game_paper=%s,game_mtgo=%s,game_arena=%s,game_astral=%s,game_sega=%s,multiverse_id=%s,multiverse_id_2=%s,hash=%s,update_count=update_count+1,update_time=%s WHERE id=%s"
     update_addl_sql = "UPDATE Prints_Additional SET rulings_uri=%s,scryfall_uri=%s,uri=%s,flavor_text=%s,printed_name=%s,printed_text=%s,printed_type_line=%s,preview_source_uri=%s,preview_source=%s,cardhoarder_purchase_uri=%s,cardmarket_purchase_uri=%s,tcgplayer_purchase_uri=%s,edhrec_uri=%s,gatherer_uri=%s,tcgplayer_infinite_articles_uri=%s,tcgplayer_infinite_decks_uri=%s WHERE id=%s"
     addl_data_delete_sql_start = "DELETE FROM AdditionalData where print_key in ("
 
@@ -257,22 +257,39 @@ class MTGPrint(MTGPersistable):
         self.game_astral = games is not None and 'astral' in games
         self.game_sega = games is not None and 'sega' in games
 
-        self.additional_arrays = {}
-        self.multiverse_ids = data.get('multiverse_ids')
-        if self.multiverse_ids is not None:
-            self.additional_arrays['multiverse_ids'] = self.multiverse_ids
-        self.keywords = data.get('keywords')
-        if self.keywords is not None:
-            self.additional_arrays['keywords'] = self.keywords
-        self.frame_effects = data.get('frame_effects')
-        if self.frame_effects is not None:
-            self.additional_arrays['frame_effects'] = self.frame_effects
-        self.promo_types = data.get('promo_types')
-        if self.promo_types is not None:
-            self.additional_arrays['promo_types'] = self.promo_types
-        self.attraction_lights = data.get('attraction_lights')
-        if self.attraction_lights is not None:
-            self.additional_arrays['attraction_lights'] = self.attraction_lights
+        self.multiverse_id = self.multiverse_id_2 = None
+        multiverse_ids = data.get('multiverse_ids')
+        if multiverse_ids:
+            self.multiverse_id = multiverse_ids.pop(0)
+        if multiverse_ids:
+            self.multiverse_id_2 = multiverse_ids.pop(0)
+        if multiverse_ids:
+            raise Exception("%s: Too Many multiverse_ids: %s" % (self.scryfall_id,multiverse_ids))
+
+        self.attributes = []
+        #self.multiverse_ids = data.get('multiverse_ids')
+        #if self.multiverse_ids is not None:
+        #    self.additional_arrays['multiverse_ids'] = self.multiverse_ids
+        keywords = data.get('keywords')
+        if keywords:
+            #self.additional_arrays['keywords'] = self.keywords
+            self.keywords = MTGKeyword.parse_data(keywords,self.scryfall_id)
+            self.attributes.extend(self.keywords)
+        frame_effects = data.get('frame_effects')
+        if frame_effects:
+            #self.additional_arrays['frame_effects'] = self.frame_effects
+            self.frame_effects = MTGFrameEffect.parse_data(frame_effects,self.scryfall_id)
+            self.attributes.extend(self.frame_effects)
+        promo_types = data.get('promo_types')
+        if promo_types:
+            #self.additional_arrays['promo_types'] = self.promo_types
+            self.promo_types = MTGPromoType.parse_data(promo_types,self.scryfall_id)
+            self.attributes.extend(self.promo_types)
+        attraction_lights = data.get('attraction_lights')
+        if attraction_lights:
+            #self.additional_arrays['attraction_lights'] = self.attraction_lights
+            self.attraction_lights = MTGAttractionLight.parse_data(attraction_lights,self.scryfall_id)
+            self.attributes.extend(self.attraction_lights)
         
         # image_uris can be constructed from scryfall_id
         # no need to persist these separately
@@ -387,7 +404,16 @@ class MTGPrint(MTGPersistable):
             if parts is not None:
                 for part in parts:
                     hash_data.extend(part.getHashData())
-            hash_data.extend(self.getAdditionalArrays())
+            """ if self.keywords:
+                for keyword in self.keywords:
+                    hash_data.extend(keyword.getHashData())
+            if self.promo_types:
+                for promo_type in self.promo_types:
+                    hash_data.extend(promo_type.getHashData())
+            hash_data.extend(self.getAdditionalArrays()) """
+            if self.attributes:
+                for attribute in self.attributes:
+                    hash_data.extend(attribute.getHashData())
             self.md5 = hashlib.md5(''.join(str(field) for field in hash_data).encode('utf-8')).hexdigest()
         return self.md5
     
@@ -402,7 +428,7 @@ class MTGPrint(MTGPersistable):
                 self.tcgplayer_etched_id,self.cardmarket_id,self.artist,self.content_warning,self.flavor_name,
                 self.illustration_id,self.variation_of,self.security_stamp,
                 self.watermark,self.preview_previewed_at,self.finish_nonfoil,self.finish_foil,
-                self.finish_etched,self.game_paper,self.game_mtgo,self.game_arena,self.game_astral,self.game_sega]
+                self.finish_etched,self.game_paper,self.game_mtgo,self.game_arena,self.game_astral,self.game_sega,self.multiverse_id,self.multiverse_id_2]
     
     def getPersistData(self):
         return [MTGCard.getCardKey(self.card_id),MTGSet.getSetKey(self.set_scryfall_id)] + self.getHashData() + [self.md5,self.data_date,self.id]
@@ -445,7 +471,7 @@ class MTGPrint(MTGPersistable):
     def getBatch(print_type):
         print_data = []
         addl_print_data = []
-        addl_data = []
+        #addl_data = []
 
         batch_prints = print_type[:BATCH_SIZE]
         del print_type[:BATCH_SIZE]
@@ -462,14 +488,15 @@ class MTGPrint(MTGPersistable):
             
             Legalities.addToBatch(print_key,prnt.getLegalities())
 
-            a = prnt.getAdditionalArrays()
+            """ a = prnt.getAdditionalArrays()
             if len(a)>0:
                 for type in a:
                     for value in a[type]:
-                        addl_data.append([print_key, type, value])
+                        addl_data.append([print_key, type, value]) """
+            MTGAttribute.addToBatch(prnt.attributes)
 
 
-        return print_data, addl_print_data, addl_data
+        return print_data, addl_print_data#, addl_data
 
 
 class MTGPrice():
@@ -648,29 +675,31 @@ class Legalities(MTGPersistable):
     delete_sql_start = "DELETE FROM RelatedCards where print_key in ("
     _batch_data = []
 
+    legalities_map = {'legal': 1, 'not_legal': 2, 'restricted': 3, 'banned': 4}
+
     def __init__(self,data: dict, parent_scryfall_id: str):
         self.parent_scryfall_id = parent_scryfall_id
-        self.standard = data['standard']
-        self.future = data['future']
-        self.historic = data['historic']
-        self.gladiator = data['gladiator']
-        self.pioneer = data['pioneer']
-        self.explorer = data['explorer']
-        self.modern = data['modern']
-        self.legacy = data['legacy']
-        self.pauper = data['pauper']
-        self.vintage = data['vintage']
-        self.penny = data['penny']
-        self.commander = data['commander']
-        self.oathbreaker = data['oathbreaker']
-        self.brawl = data['brawl']
-        self.historicbrawl = data['historicbrawl']
-        self.alchemy = data['alchemy']
-        self.paupercommander = data['paupercommander']
-        self.duel = data['duel']
-        self.oldschool = data['oldschool']
-        self.premodern = data['premodern']
-        self.predh = data['predh']
+        self.standard: int = Legalities.legalities_map.get(data['standard'])
+        self.future: int = Legalities.legalities_map.get(data['future'])
+        self.historic: int = Legalities.legalities_map.get(data['historic'])
+        self.gladiator: int = Legalities.legalities_map.get(data['gladiator'])
+        self.pioneer: int = Legalities.legalities_map.get(data['pioneer'])
+        self.explorer: int = Legalities.legalities_map.get(data['explorer'])
+        self.modern: int = Legalities.legalities_map.get(data['modern'])
+        self.legacy: int = Legalities.legalities_map.get(data['legacy'])
+        self.pauper: int = Legalities.legalities_map.get(data['pauper'])
+        self.vintage: int = Legalities.legalities_map.get(data['vintage'])
+        self.penny: int = Legalities.legalities_map.get(data['penny'])
+        self.commander: int = Legalities.legalities_map.get(data['commander'])
+        self.oathbreaker: int = Legalities.legalities_map.get(data['oathbreaker'])
+        self.brawl: int = Legalities.legalities_map.get(data['brawl'])
+        self.historicbrawl: int = Legalities.legalities_map.get(data['historicbrawl'])
+        self.alchemy: int = Legalities.legalities_map.get(data['alchemy'])
+        self.paupercommander: int = Legalities.legalities_map.get(data['paupercommander'])
+        self.duel: int = Legalities.legalities_map.get(data['duel'])
+        self.oldschool: int = Legalities.legalities_map.get(data['oldschool'])
+        self.premodern: int = Legalities.legalities_map.get(data['premodern'])
+        self.predh: int = Legalities.legalities_map.get(data['predh'])
 
         self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
         self._id = None
@@ -702,6 +731,118 @@ class Legalities(MTGPersistable):
         batch_data = Legalities._batch_data
         Legalities._batch_data = []
         return batch_data
+    
+def attribute(cls):
+    cls._attr_map = {}
+    cls._type_id = cls._type_map.get(cls._type_name)
+    result = DBConnection.singleQuery(cls._existing_sql, [cls._type_id])
+    for a in result:
+        cls._attr_map[a[1]]=a[0]
+    return cls
+    
+
+class MTGAttribute(abc.ABC):
+    _existing_sql = "SELECT id,attribute FROM PrintAttributes WHERE attribute_type = %s"
+    _insert_sql = "INSERT INTO PrintAttributes(id,attribute_type,attribute) VALUES(%s,%s,%s)"
+    _insert_link_sql = "INSERT INTO PrintAttributeLink(attribute_key,print_key,id) VALUES(%s,%s,%s)"
+    _delete_sql_start = "DELETE FROM PrintAttributeLink where print_key in ("
+    _type_map = {'keyword': 1, 'promo_type': 2, 'frame_effect': 3, 'attraction_light': 4}
+
+    _batch_data = []
+
+    @classmethod
+    def get_type_id(cls,type_: str) -> int:
+        return cls._type_map.get(type_)
+    
+    @classmethod
+    def parse_data(cls,data: list, parent_scryfall_id: str) -> list:
+        attrs = []
+        for attr in data:
+            attrs.append(cls(attr,parent_scryfall_id))
+        return attrs
+    
+    def __init__(self, attr: str, parent_scryfall_id: str):
+        self.attr: str = attr
+        self.parent_scryfall_id: str = parent_scryfall_id
+        if attr not in self.__class__._attr_map:
+            id = DBConnection.getNextId()
+            DBConnection.singleQuery(self.__class__._insert_sql, [id,self.__class__._type_id,attr])
+            self.__class__._attr_map[self.attr] = id
+        self.attribute_key = self.__class__._attr_map.get(attr)
+        self.id = None
+        self.print_key = None
+
+    def getHashData(self):
+        return [self.attr]
+
+    def getPersistData(self):
+        if not self.print_key:
+            self.print_key = MTGPrint.getPrintKey(self.parent_scryfall_id)
+        if not self.id:
+            self.id = DBConnection.getNextId()
+        return [self.attribute_key,self.print_key,self.id]
+    
+    @classmethod
+    def addToBatch(cls,attributes):
+        if attributes:
+            for attribute in attributes:
+                #id = DBConnection.getNextId()
+                MTGAttribute._batch_data.append(attribute.getPersistData())
+
+    @classmethod
+    def getBatchData(cls):
+        batch_data = MTGAttribute._batch_data
+        MTGAttribute._batch_data = []
+        return batch_data
+
+    
+@attribute
+class MTGKeyword(MTGAttribute):
+    _type_name = 'keyword'
+
+    @classmethod
+    def parse_keywords(cls, data: list, parent_scryfall_id: str) -> list:
+        return super().parse_data(data,parent_scryfall_id)
+
+    def __init__(self,keyword: str,parent_scryfall_id: str):
+        super().__init__(keyword,parent_scryfall_id)    
+
+    
+@attribute
+class MTGPromoType(MTGAttribute):
+    _type_name = 'promo_type'
+
+    @classmethod
+    def parse_promo_types(cls, data: list, parent_scryfall_id: str) -> list:
+        return super().parse_data(data,parent_scryfall_id)
+
+    def __init__(self,promo_type: str,parent_scryfall_id: str):
+        super().__init__(promo_type,parent_scryfall_id)
+
+    
+@attribute
+class MTGFrameEffect(MTGAttribute):
+    _type_name = 'frame_effect'
+
+    @classmethod
+    def parse_frame_effects(cls, data: list, parent_scryfall_id: str) -> list:
+        return super().parse_data(data,parent_scryfall_id)
+
+    def __init__(self,frame_effect: str,parent_scryfall_id: str):
+        super().__init__(frame_effect,parent_scryfall_id)
+    
+@attribute
+class MTGAttractionLight(MTGAttribute):
+    _type_name = 'attraction_light'
+
+    @classmethod
+    def parse_attraction_lights(cls, data: list, parent_scryfall_id: str) -> list:
+        return super().parse_data(data,parent_scryfall_id)
+
+    def __init__(self,attraction_light: str,parent_scryfall_id: str):
+        super().__init__(attraction_light,parent_scryfall_id)
+
+
 
 class MTGCard(MTGPersistable):
     existing_cards_sql = "SELECT c.id,c.card_id,c.hash,c.update_time FROM Cards c"
