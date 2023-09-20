@@ -107,6 +107,9 @@ CREATE TABLE `Legalities` (
   `oldschool` tinyint NOT NULL,
   `premodern` tinyint NOT NULL,
   `predh` tinyint NOT NULL,
+  `hash` varchar(200) NOT NULL,
+  `update_count` int(11) NOT NULL DEFAULT 0,
+  `update_time` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `ix_print_key` (`print_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci COMMENT='legal = 1, not_legal = 2, restricted = 3, banned = 4';

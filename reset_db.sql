@@ -1,6 +1,5 @@
 truncate table `Prints`;
 truncate table `Prints_Additional`;
-truncate table `AdditionalData`;
 truncate table `Sets`;
 truncate table `Legalities`;
 truncate table `RelatedCards`;
