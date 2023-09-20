@@ -60,8 +60,11 @@ class DBConnection():
             traceback.print_exc()
             if conn is not None:
                 conn.rollback()
+            raise error
         finally:
             if conn is not None:
+                if conn.conn.in_transaction:
+                    conn.commit()
                 conn.close()
 
         return res

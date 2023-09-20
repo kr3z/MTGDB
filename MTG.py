@@ -8,7 +8,7 @@ import logging.config
 from datetime import datetime
 from DB import DBConnection
 from Scryfall import scryfall_api_request, scryfall_request
-from MTGClasses import MTGPrint, MTGCard, MTGSet, MTGPrice, CardFace, RelatedCard, Legalities
+from MTGClasses import MTGPrint, MTGCard, MTGSet, MTGPrice, CardFace, RelatedCard, Legalities, MTGAttribute
 
 WORKING_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -66,7 +66,7 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
 
         # TODO: COnsilidate new and update blocks
         while(MTGPrint.hasNewData()):
-            new_print_data, new_addl_print_data, new_addl_data = MTGPrint.getNewBatch()
+            new_print_data, new_addl_print_data = MTGPrint.getNewBatch()
             cursor.executemany(MTGPrint.insert_sql,new_print_data)
             cursor.executemany(MTGPrint.insert_addl_sql,new_addl_print_data)
 
@@ -75,7 +75,8 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
             cursor.executemany(CardFace.insert_sql,CardFace.getBatchData())
             cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
             cursor.executemany(Legalities.insert_sql,Legalities.getBatchData())
-            cursor.executemany(MTGPrint.insert_addl_data_sql,new_addl_data)
+            cursor.executemany(MTGAttribute._insert_link_sql,MTGAttribute.getBatchData())
+            #cursor.executemany(MTGPrint.insert_addl_data_sql,new_addl_data)
 
             conn.commit()
             counts['NewPrints']+=len(new_print_data)
@@ -83,7 +84,7 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
 
         while(MTGPrint.hasUpdateData()):
             # TODO: update legalities instead of delete/re-insert
-            update_print_data, update_print_addl_data, update_addl_data = MTGPrint.getUpdateBatch()
+            update_print_data, update_print_addl_data = MTGPrint.getUpdateBatch()
             cursor.executemany(MTGPrint.update_sql,update_print_data)
             cursor.executemany(MTGPrint.update_addl_sql,update_print_addl_data)
 
@@ -92,17 +93,20 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
             card_face_delete_sql = CardFace.delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
             related_card_delete_sql = RelatedCard.delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
             legalities_delete_sql = Legalities.delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
-            addl_data_delete_sql = MTGPrint.addl_data_delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
+            #addl_data_delete_sql = MTGPrint.addl_data_delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
+            attribute_delete_sql = MTGAttribute._delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
             cursor.execute(card_face_delete_sql,print_keys)
             cursor.execute(related_card_delete_sql,print_keys)
             cursor.execute(legalities_delete_sql,print_keys)
-            cursor.execute(addl_data_delete_sql,print_keys)
+            #cursor.execute(addl_data_delete_sql,print_keys)
+            cursor.execute(attribute_delete_sql,print_keys)
 
             cursor.executemany(CardFace.insert_sql,CardFace.getBatchData())
             cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
             cursor.executemany(Legalities.insert_sql,Legalities.getBatchData())
             # cursor.executemany(Legalities.update_sql,Legalities.getBatchData())
-            cursor.executemany(MTGPrint.insert_addl_data_sql,update_addl_data)
+            #cursor.executemany(MTGPrint.insert_addl_data_sql,update_addl_data)
+            cursor.executemany(MTGAttribute._insert_link_sql,MTGAttribute.getBatchData())
             #cursor.executemany(MTGPrint.legalities_update_sql,legalities_data)
 
             conn.commit()
