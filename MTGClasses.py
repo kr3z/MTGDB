@@ -54,38 +54,41 @@ class MTGPersistable(abc.ABC):
         return obj_data
 
 def cacheinit(cls):
+    cls._id_map = {}
+    cls._hashes = set()
+    cls._date_map = {}
+
+    result = DBConnection.singleQuery(cls._cache_sql)
+    for c in result:
+        cls._id_map[c[1]]=c[0]
+        cls._hashes.add(c[2])
+        cls._date_map[c[1]] = c[3]
+
     cls.cache_init()
 
     return cls
 
 @cacheinit
 class MTGSet(MTGPersistable):
-    _cache_sql = "SELECT id,scryfall_id,hash FROM Sets"
+    _cache_sql = "SELECT id,scryfall_id,hash,update_time FROM Sets"
     _cache_set_type_sql = "SELECT id,type FROM SetTypes"
 
-    insert_sql = "INSERT INTO Sets(scryfall_id,code,name,card_count,digital,foil_only,nonfoil_only,scryfall_uri,uri,icon_svg_uri,search_uri,mtgo_code,tcgplayer_id,released_at,block_code,block,parent_set_code,printed_size,SetType_key,hash,id) VALUES(%s,%s,%s, %s, %s, %s, %s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s, %s,%s)"
-    update_sql = "UPDATE Sets set scryfall_id=%s,code=%s,name=%s,card_count=%s,digital=%s,foil_only=%s,nonfoil_only=%s,scryfall_uri=%s,uri=%s,icon_svg_uri=%s,search_uri=%s,mtgo_code=%s,tcgplayer_id=%s,released_at=%s,block_code=%s,block=%s,parent_set_code=%s,printed_size=%s,SetType_key=%s,hash=%s,update_count=update_count+1 WHERE id=%s"
+    insert_sql = "INSERT INTO Sets(scryfall_id,code,name,card_count,digital,foil_only,nonfoil_only,scryfall_uri,uri,icon_svg_uri,search_uri,mtgo_code,tcgplayer_id,released_at,block_code,block,parent_set_code,printed_size,SetType_key,hash,update_time,id) VALUES(%s,%s,%s, %s, %s, %s, %s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s, %s,%s,%s)"
+    update_sql = "UPDATE Sets set scryfall_id=%s,code=%s,name=%s,card_count=%s,digital=%s,foil_only=%s,nonfoil_only=%s,scryfall_uri=%s,uri=%s,icon_svg_uri=%s,search_uri=%s,mtgo_code=%s,tcgplayer_id=%s,released_at=%s,block_code=%s,block=%s,parent_set_code=%s,printed_size=%s,SetType_key=%s,hash=%s,update_time=%s,update_count=update_count+1 WHERE id=%s"
 
-    _id_map = {}
-    _hashes = set()
     _set_types = {}
-
     _new_data = []
     _update_data = []
 
     @classmethod
     def cache_init(cls):
-        result = DBConnection.singleQuery(cls._cache_sql)
-        for s in result:
-            cls._id_map[s[1]]=s[0]
-            cls._hashes.add(s[2])
-
         result = DBConnection.singleQuery(cls._cache_set_type_sql)
         for s in result:
             cls._set_types[s[1]]=s[0]
 
-    def __init__(self,data):
-        self.scryfall_id = data.get('id')
+    def __init__(self,data, data_date = datetime.now()):
+        self.data_date = data_date
+        self.uuid = data.get('id')
         self.code = data.get('code')
         self.name = data.get('name')
         self.set_type = data.get('set_type')
@@ -106,53 +109,40 @@ class MTGSet(MTGPersistable):
         self.parent_set_code = data.get('parent_set_code')
         self.printed_size = data.get('printed_size')
 
-        self.md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
+        self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
+
+        self._exists : bool = self.uuid in self.__class__._id_map
+        self._needs_update : bool = False
 
         if not self.exists():
             logger.info("%s not found in DB. Persisting" ,self.name)
-            MTGSet._id_map[self.scryfall_id] = DBConnection.getNextId()
-            MTGSet._new_data.append(self)
-        elif self.needsUpdate():
+            self.__class__._new_data.append(self)
+            self.__class__._id_map[self.uuid] = DBConnection.getNextId()
+        elif self._md5 not in self.__class__._hashes and self.data_date > self.__class__._date_map[self.uuid]:
             logger.info("%s needs updating" ,self.name)
-            MTGSet._update_data.append(self)
+            self.__class__._update_data.append(self)
+            self._needs_update = True
             
 
-        self.id = MTGSet._id_map.get(self.scryfall_id)
-        MTGSet._hashes.add(self.md5)
-
-    def exists(self):
-        return self.scryfall_id in MTGSet._id_map
+        self._id = self.__class__._id_map.get(self.uuid)
+        self.__class__._hashes.add(self._md5)
+        self.__class__._date_map[self.uuid] = self.data_date
     
-    def needsUpdate(self):
-        return self.exists() and self.getMD5() not in MTGSet._hashes
+    @classmethod
+    def getSetKey(cls,set_uuid):
+        return cls._id_map.get(set_uuid)
     
-    @staticmethod
-    def getSetKey(set_scryfall_id):
-        return MTGSet._id_map.get(set_scryfall_id)
-    
-    @staticmethod
-    def getSetTypeKey(set_type):
-        return MTGSet._set_types.get(set_type)
-    
-    def getScryfallId(self):
-        return self.scryfall_id
-    
-    def getSetType(self):
-        return self.set_type
-
-    def getMD5(self):
-        return self.md5
-    
-    def getId(self):
-        return self.id
+    @classmethod
+    def getSetTypeKey(cls,set_type):
+        return cls._set_types.get(set_type)
 
     def getHashData(self):
-        return [self.scryfall_id,self.code,self.name,self.card_count,self.digital,self.foil_only,self.nonfoil_only,
+        return [self.uuid,self.code,self.name,self.card_count,self.digital,self.foil_only,self.nonfoil_only,
                 self.scryfall_uri,self.uri,self.icon_svg_uri,self.search_uri,self.mtgo_code,self.tcgplayer_id,self.released_at,self.block_code,
                 self.block,self.parent_set_code,self.printed_size]
     
     def getPersistData(self):
-        return self.getHashData() + [MTGSet.getSetTypeKey(self.set_type),self.md5, self.id]
+        return self.getHashData() + [MTGSet.getSetTypeKey(self.set_type),self._md5, self.data_date, self._id]
     
 
 class MTGPrint(MTGPersistable):
@@ -437,16 +427,15 @@ class MTGPrint(MTGPersistable):
     def setSetKey(self,set_key):
         self.set_key = set_key
 
-    @staticmethod
-    def getPrintKey(scryfall_id):
-        return MTGPrint.id_map.get(scryfall_id)
+    @classmethod
+    def getPrintKey(cls,uuid: str) -> int:
+        return cls.id_map.get(uuid)
 
     #TODO: these batches can be updated to work better
     @classmethod
     def getBatch(cls,print_type):
         print_data = []
         addl_print_data = []
-        #addl_data = []
 
         batch_prints = print_type[:BATCH_SIZE]
         del print_type[:BATCH_SIZE]
@@ -461,7 +450,7 @@ class MTGPrint(MTGPersistable):
             MTGAttribute.addToBatch(prnt.attributes)
 
 
-        return print_data, addl_print_data#, addl_data
+        return print_data, addl_print_data
 
 
 class MTGPrice():
@@ -647,25 +636,15 @@ class Legalities(MTGPersistable):
     
     #TODO: adding print_keys to update to keep persist data the same between insert/update, but it shouldn't be needed (or should it be included in hash data?)
     update_sql = "UPDATE Legalities SET print_key=%s,standard=%s,future=%s,historic=%s,gladiator=%s,pioneer=%s,explorer=%s,modern=%s,legacy=%s,pauper=%s,vintage=%s,penny=%s,commander=%s,oathbreaker=%s,brawl=%s,historicbrawl=%s,alchemy=%s,paupercommander=%s,duel=%s,oldschool=%s,premodern=%s,predh=%s,hash=%s,update_time=%s,update_count=update_count+1 WHERE id = %s"
-    #delete_sql_start = "DELETE FROM RelatedCards where print_key in ("
-    _batch_data = []
 
     legalities_map = {'legal': 1, 'not_legal': 2, 'restricted': 3, 'banned': 4}
-
-    _id_map = {}
-    _date_map = {}
-    _hashes = set()
 
     _new_data = []
     _update_data = []
 
     @classmethod
     def cache_init(cls):
-        result = DBConnection.singleQuery(cls._cache_sql)
-        for c in result:
-            cls._id_map[c[1]]=c[0]
-            cls._hashes.add(c[2])
-            cls._date_map[c[1]] = c[3]
+        pass
 
     def __init__(self,data: dict, parent_uuid: str, data_date = datetime.now()):
         self.data_date = data_date
@@ -720,9 +699,6 @@ class Legalities(MTGPersistable):
         if self.print_key is None:
             self.print_key = MTGPrint.getPrintKey(self.parent_uuid)
         return [self.print_key] + self.getHashData() + [self._md5, self.data_date, self._id]
-
-    def getMD5(self) -> str:
-        return self._md5
     
 def attribute(cls):
     cls._attr_map = {}
@@ -741,10 +717,6 @@ class MTGAttribute(abc.ABC):
     _type_map = {'keyword': 1, 'promo_type': 2, 'frame_effect': 3, 'attraction_light': 4}
 
     _batch_data = []
-
-    """ @classmethod
-    def get_type_id(cls,type_: str) -> int:
-        return cls._type_map.get(type_) """
     
     @classmethod
     def parse_data(cls,data: list, parent_scryfall_id: str) -> list:
@@ -841,20 +813,12 @@ class MTGCard(MTGPersistable):
     insert_sql = "INSERT INTO Cards(name,oracle_id,prints_search_uri,cmc,color_identity,reserved,type_line,oracle_text,color_indicator,color,edhc_rank,loyalty,mana_cost,penny_rank,power,toughness,produced_mana,hand_modifier,life_modifier,hash,update_time,id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     update_sql = "UPDATE Cards SET name=%s,oracle_id=%s,prints_search_uri=%s,cmc=%s,color_identity=%s,reserved=%s,type_line=%s,oracle_text=%s,color_indicator=%s,color=%s,edhc_rank=%s,loyalty=%s,mana_cost=%s,penny_rank=%s,power=%s,toughness=%s,produced_mana=%s,hand_modifier=%s,life_modifier=%s,hash=%s,update_count=update_count+1,update_time=%s WHERE id = %s"
 
-    _id_map = {}
-    _date_map = {}
-    _hashes = set()
-
     _new_data = []
     _update_data = []
 
     @classmethod
     def cache_init(cls):
-        result = DBConnection.singleQuery(cls._cache_sql)
-        for c in result:
-            cls._id_map[c[1]]=c[0]
-            cls._hashes.add(c[2])
-            cls._date_map[c[1]] = c[3]
+        pass
     
     def __init__(self,data, data_date = datetime.now()):
         self.data_date = data_date
@@ -896,44 +860,21 @@ class MTGCard(MTGPersistable):
         self.card_id = ''.join(filter(None,[self.name,self.oracle_id]))
 
         # Calculate hash of card data so we can easily identify if existing data needs to be updated
-        self.md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
+        self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
 
-        #if not self.exists() and self.card_id not in MTGCard._new_card_ids:
+        self._exists : bool = self.card_id in self.__class__._id_map
+        self._needs_update : bool = False
+
         if not self.exists():
-            MTGCard._new_data.append(self)
-            MTGCard._id_map[self.card_id] = DBConnection.getNextId()
-        elif self.needsUpdate():
-            MTGCard._update_data.append(self)
+            self.__class__._new_data.append(self)
+            self.__class__._id_map[self.card_id] = DBConnection.getNextId()
+        elif self._md5 not in self.__class__._hashes and self.data_date > self.__class__._date_map[self.card_id]:
+            self.__class__._update_data.append(self)
+            self._needs_update = True
         
-        self.id = MTGCard._id_map.get(self.card_id)
-        MTGCard._hashes.add(self.md5)
-        MTGCard._date_map[self.card_id] = self.data_date
-
-    def exists(self):
-        return self.card_id in MTGCard._id_map
-    
-    def needsUpdate(self):
-        return self.exists() and self.md5 not in MTGCard._hashes and self.data_date > MTGCard._date_map[self.card_id]
-    
-    def getId(self):
-        return self.id
-
-    def getName(self):
-        return self.name
-    
-    def getOracleId(self):
-        return self.oracle_id
-    
-    def getCardId(self):
-        return self.card_id
-    
-    def getDate(self):
-        return self.data_date
-    
-    def getMD5(self):
-        #if self.md5 is None:
-        #    self.md5 = hashlib.md5(''.join(str(field) for field in self.getPersistData()).encode('utf-8')).hexdigest()
-        return self.md5
+        self._id = self.__class__._id_map.get(self.card_id)
+        self.__class__._hashes.add(self._md5)
+        self.__class__._date_map[self.card_id] = self.data_date
     
     def getHashData(self):
         return [self.name,self.oracle_id,self.prints_search_uri,self.cmc,self.color_identity,self.reserved,self.type_line,
@@ -941,7 +882,7 @@ class MTGCard(MTGPersistable):
                 self.power,self.toughness,self.produced_mana,self.hand_modifier,self.life_modifier]
     
     def getPersistData(self):
-        return self.getHashData() + [self.md5,self.data_date,self.id]
+        return self.getHashData() + [self._md5,self.data_date,self._id]
     
     @classmethod
     def getCardKey(cls,card_id):

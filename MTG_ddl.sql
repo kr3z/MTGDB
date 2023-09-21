@@ -268,7 +268,7 @@ CREATE TABLE `Sets` (
   `printed_size` smallint(6) DEFAULT NULL,
   `hash` varchar(200) COLLATE latin1_general_ci NOT NULL,
   `update_count` int(11) NOT NULL DEFAULT '0',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `ux_scryfall_id` (`scryfall_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;
