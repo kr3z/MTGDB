@@ -23,7 +23,14 @@ def scryfall_request(url,p=None, limit=None):
         sleep_time = (100 - time_since_last_req)/1000.0
         logger.debug("Sleeping for API rate limit: %d ms" ,sleep_time*1000)
         time.sleep(sleep_time)
-    response = scryfall_session.get(url,params=p)
+    try:
+        response = scryfall_session.get(url,params=p,stream=False)
+    except Exception as e:
+        logger.error(e)
+        scryfall_session.close()
+        time.sleep(.1)
+        scryfall_session = requests.Session()
+        response = scryfall_session.get(url,params=p,stream=False)
     last_req = round(time.time() * 1000)
     if response.status_code != 200:
         raise ScryfallRequestException(response)

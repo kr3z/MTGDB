@@ -16,6 +16,7 @@ logging.config.fileConfig(WORKING_DIR+os.sep+'logging.conf')
 logger = logging.getLogger('MTG')
 
 BATCH_SIZE= 1000
+SET_PERIOD_DAYS = 3
 
 #TODO: desc
 desc = """
@@ -195,9 +196,22 @@ def update_sets():
             conn.close()
     
 def update_cards_by_set(scryfall_id):
+    last_update_time_sql = ("SELECT GREATEST(MAX(p.update_time),IFNULL(MAX(l.update_time),str_to_date('01-01-1970','%m-%d-%Y')),IFNULL(MAX(rc.update_time),str_to_date('01-01-1970','%m-%d-%Y')),IFNULL(MAX(pr.price_date),str_to_date('01-01-1970','%m-%d-%Y'))) "
+                            "FROM Prints p "
+                            "LEFT JOIN Legalities l on l.print_key=p.id "
+                            "LEFT JOIN RelatedCards rc on rc.print_key=p.id "
+                            "LEFT JOIN Prices pr on pr.print_key=p.id and pr.is_latest=1 "
+                            "WHERE p.set_key = %s")
     ret = None
     res = DBConnection.singleQuery("SELECT search_uri FROM Sets where scryfall_id = %s",[scryfall_id])
     if res is not None:
+        last_update = None
+        last_update_res = DBConnection.singleQuery(last_update_time_sql,[MTGSet.getSetKey(scryfall_id)])
+        if last_update_res:
+            last_update = last_update_res[0][0]
+        if last_update and (datetime.now() - last_update).days < SET_PERIOD_DAYS:
+            logger.info("Set with UUID: %s was last updated: %s. Skipping update", scryfall_id, last_update)
+            return ret
         search_uri = res[0][0]
         search_uri += "&include_multilingual=true"
         logger.debug("Retrieving cards for Set scryfall_id: %s using URI: %s", scryfall_id, search_uri)

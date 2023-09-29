@@ -86,8 +86,8 @@ class MTGSet(MTGPersistable):
         for s in result:
             cls._set_types[s[1]]=s[0]
 
-    def __init__(self,data, data_date = datetime.now()):
-        self.data_date = data_date
+    def __init__(self,data, data_date = None):
+        self.data_date = data_date if data_date else datetime.now()
         self.uuid = data.get('id')
         self.code = data.get('code')
         self.name = data.get('name')
@@ -172,8 +172,8 @@ class MTGPrint(MTGPersistable):
     _new_data = []
     _update_data = []
 
-    def __init__(self,data, data_date = datetime.now()):
-        self.data_date = data_date
+    def __init__(self,data, data_date = None):
+        self.data_date = data_date if data_date else datetime.now()
 
         # Read JSON Data
         self.scryfall_id = data.get('id')
@@ -464,8 +464,8 @@ class MTGPrice():
     _cached_sets = set()
     _new_prices = []
 
-    def __init__(self,data, data_date = datetime.now(),print_key = None,set_scryfall_id = None):
-        self.price_date = data_date.date()
+    def __init__(self,data, data_date = None,print_key = None,set_scryfall_id = None):
+        self.price_date = data_date.date() if data_date else datetime.now().date()
         self.usd = None if data.get('usd') is None else float(data.get('usd'))
         self.usd_foil = None if data.get('usd_foil') is None else float(data.get('usd_foil'))
         self.usd_etched = None if data.get('usd_etched') is None else float(data.get('usd_etched'))
@@ -520,8 +520,8 @@ class CardFace(MTGPersistable):
 
     _batch_data = []
 
-    def __init__(self,data: dict, parent_scryfall_id: str, data_date = datetime.now()):
-        self.data_date = data_date
+    def __init__(self,data: dict, parent_scryfall_id: str, data_date = None):
+        self.data_date = data_date if data_date else datetime.now()
         self.parent_scryfall_id = parent_scryfall_id
         self.name = data.get('name')
         self.mana_cost = data.get('mana_cost')
@@ -599,8 +599,8 @@ class RelatedCard(MTGPersistable):
     def cache_init(cls):
         pass
 
-    def __init__(self,data: dict, parent_uuid: str, data_date: datetime = datetime.now()):
-        self.data_date = data_date
+    def __init__(self,data: dict, parent_uuid: str, data_date: datetime = None):
+        self.data_date = data_date if data_date else datetime.now()
         self.parent_uuid = parent_uuid
         self.scryfall_id = data.get('id')
         self.component = data.get('component')
@@ -665,8 +665,8 @@ class Legalities(MTGPersistable):
     def cache_init(cls):
         pass
 
-    def __init__(self,data: dict, parent_uuid: str, data_date: datetime = datetime.now()):
-        self.data_date = data_date
+    def __init__(self,data: dict, parent_uuid: str, data_date: datetime = None):
+        self.data_date = data_date if data_date else datetime.now()
         self.parent_uuid = parent_uuid
         self.standard: int = Legalities.legalities_map.get(data['standard'])
         self.future: int = Legalities.legalities_map.get(data['future'])
@@ -839,8 +839,8 @@ class MTGCard(MTGPersistable):
     def cache_init(cls):
         pass
     
-    def __init__(self,data, data_date = datetime.now()):
-        self.data_date = data_date
+    def __init__(self,data, data_date = None):
+        self.data_date = data_date if data_date else datetime.now()
 
         # Read JSON data
         self.name = data.get('name')
