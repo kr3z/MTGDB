@@ -39,7 +39,7 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
     #logger.info("New Prints: %d New Cards: %d" ,len(new_prints),len(new_cards))
     #logger.info("Updated Prints: %d Updated Cards: %d" ,len(update_prints),len(update_cards))
 
-    counts = {'NewCards': 0, 'UpdatedCards': 0, 'NewPrints': 0, 'UpdatedPrints': 0, 'NewLegalities': 0, 'UpdatedLegalities': 0, 'NewPrices': 0}
+    counts = {'NewCards': 0, 'UpdatedCards': 0, 'NewPrints': 0, 'UpdatedPrints': 0, 'NewRelatedCard': 0, 'UpdatedRelatedCard': 0, 'NewLegalities': 0, 'UpdatedLegalities': 0, 'NewPrices': 0}
 
     close_conn = conn is None
     cursor = None
@@ -73,7 +73,7 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
             #print_keys = [row[-1] for row in new_print_data]
             
             cursor.executemany(CardFace.insert_sql,CardFace.getBatchData())
-            cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
+            #cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
             cursor.executemany(MTGAttribute._insert_link_sql,MTGAttribute.getBatchData())
 
             conn.commit()
@@ -89,19 +89,35 @@ def import_card_data(data=None, data_date = datetime.now(),conn=None):
             print_keys = [row[-1] for row in update_print_data]
 
             card_face_delete_sql = CardFace.delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
-            related_card_delete_sql = RelatedCard.delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
+            #related_card_delete_sql = RelatedCard.delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
             attribute_delete_sql = MTGAttribute._delete_sql_start + ','.join(["%s"]*len(print_keys)) + ")"
             cursor.execute(card_face_delete_sql,print_keys)
-            cursor.execute(related_card_delete_sql,print_keys)
+            #cursor.execute(related_card_delete_sql,print_keys)
             cursor.execute(attribute_delete_sql,print_keys)
 
             cursor.executemany(CardFace.insert_sql,CardFace.getBatchData())
-            cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
+            #cursor.executemany(RelatedCard.insert_sql,RelatedCard.getBatchData())
             cursor.executemany(MTGAttribute._insert_link_sql,MTGAttribute.getBatchData())
 
             conn.commit()
             counts['UpdatedPrints']+=len(update_print_data)
             logger.info("Prints Updated: %d" ,counts['UpdatedPrints'])
+
+        while(RelatedCard.hasNewData()):
+            new_data = RelatedCard.getNewBatch()
+            cursor.executemany(RelatedCard.insert_sql,new_data)
+
+            conn.commit()
+            counts['NewRelatedCard']+=len(new_data)
+            logger.info("RelatedCard Imported: %d" ,counts['NewRelatedCard'])
+
+        while(RelatedCard.hasUpdateData()):
+            update_data = RelatedCard.getUpdateBatch()
+            cursor.executemany(RelatedCard.update_sql,update_data)
+
+            conn.commit()
+            counts['UpdatedRelatedCard']+=len(update_data)
+            logger.info("RelatedCard Updated: %d" ,counts['UpdatedRelatedCard'])
 
         while(Legalities.hasNewData()):
             new_data = Legalities.getNewBatch()

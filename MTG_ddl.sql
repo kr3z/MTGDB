@@ -217,6 +217,9 @@ CREATE TABLE `RelatedCards` (
   `name` varchar(200) COLLATE latin1_general_ci NOT NULL,
   `type_line` varchar(200) COLLATE latin1_general_ci NOT NULL,
   `uri` varchar(200) COLLATE latin1_general_ci NOT NULL,
+  `hash` varchar(200) COLLATE latin1_general_ci,
+  `update_count` int(11) DEFAULT 0 NOT NULL ,
+  `update_time` datetime DEFAULT current_timestamp() NOT NULL ,
   PRIMARY KEY (`id`),
   KEY `ix_print_key` (`print_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;

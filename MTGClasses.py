@@ -295,14 +295,6 @@ class MTGPrint(MTGPersistable):
             for face in card_faces:
                 self.faces.append(CardFace(face,self.scryfall_id))
 
-        #Related Cards
-        self.parts = None
-        all_parts = data.get('all_parts')
-        if all_parts is not None and len(all_parts)>0:
-            self.parts = []
-            for part in all_parts:
-                self.parts.append(RelatedCard(part,self.scryfall_id))
-
         self.name = data.get('name')
         self.oracle_id = data.get('oracle_id')
         self.card_id = ''.join(filter(None,[self.name,self.oracle_id]))
@@ -335,6 +327,14 @@ class MTGPrint(MTGPersistable):
         self.price = MTGPrice(data.get('prices'),data_date,self.id,self.set_scryfall_id)
         if self.price.isNull():
             self.price = None
+
+        #Related Cards
+        self.parts = None
+        all_parts = data.get('all_parts')
+        if all_parts and len(all_parts)>0:
+            self.parts = []
+            for part in all_parts:
+                self.parts.append(RelatedCard(part,self.scryfall_id, self.data_date))
 
         self.legalities = Legalities(data.get('legalities'),self.scryfall_id,self.data_date)
 
@@ -390,10 +390,10 @@ class MTGPrint(MTGPersistable):
             if faces is not None:
                 for face in faces:
                     hash_data.extend(face.getHashData())
-            parts = self.getParts()
+            """ parts = self.getParts()
             if parts is not None:
                 for part in parts:
-                    hash_data.extend(part.getHashData())
+                    hash_data.extend(part.getHashData()) """
             if self.attributes:
                 for attribute in self.attributes:
                     hash_data.extend(attribute.getHashData())
@@ -446,7 +446,7 @@ class MTGPrint(MTGPersistable):
             addl_print_data.append(prnt.getAdditionalPersistData() + [print_key])
             
             CardFace.addToBatch(print_key,prnt.getCardFaces())
-            RelatedCard.addToBatch(print_key,prnt.getParts())
+            #RelatedCard.addToBatch(print_key,prnt.getParts())
             MTGAttribute.addToBatch(prnt.attributes)
 
 
@@ -584,15 +584,24 @@ class CardFace(MTGPersistable):
         CardFace._batch_data = []
         return batch_data
 
-
+@cacheinit
 class RelatedCard(MTGPersistable):
-    insert_sql = "INSERT INTO RelatedCards(id,print_key,scryfall_id,component,name,type_line,uri) VALUES(%s,%s,%s,%s,%s,%s,%s)"
+    _cache_sql = "SELECT rc.id,p.scryfall_id,rc.hash,rc.update_time FROM RelatedCards rc, Prints p WHERE rc.print_key=p.id"
+    insert_sql = "INSERT INTO RelatedCards(scryfall_id,component,name,type_line,uri,print_key,hash,update_time,id) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     delete_sql_start = "DELETE FROM RelatedCards where print_key in ("
+    update_sql = "UPDATE RelatedCards SET scryfall_id=%s,component=%s,name=%s,type_line=%s,uri=%s,print_key=%s,hash=%s,update_time=%s,update_count=update_count+1 WHERE id=%s"
 
     _batch_data = []
+    _new_data = []
+    _update_data = []
 
-    def __init__(self,data: dict, parent_scryfall_id: str):
-        self.parent_scryfall_id = parent_scryfall_id
+    @classmethod
+    def cache_init(cls):
+        pass
+
+    def __init__(self,data: dict, parent_uuid: str, data_date: datetime = datetime.now()):
+        self.data_date = data_date
+        self.parent_uuid = parent_uuid
         self.scryfall_id = data.get('id')
         self.component = data.get('component')
         self.name = data.get('name')
@@ -600,21 +609,31 @@ class RelatedCard(MTGPersistable):
         self.uri = data.get('uri')
 
         self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
-        self._id = None
-        self.print_key = None
+        self.print_key = MTGPrint.getPrintKey(self.parent_uuid)
+
+        self._exists : bool = self.parent_uuid in self.__class__._id_map
+        self._needs_update : bool = False
+
+        if not self.exists():
+            self.__class__._new_data.append(self)
+            self.__class__._id_map[self.parent_uuid] = DBConnection.getNextId()
+        elif self._md5 not in self.__class__._hashes and self.data_date > self.__class__._date_map[self.parent_uuid]:
+            self.__class__._update_data.append(self)
+            self._needs_update = True
+        
+        self._id = self.__class__._id_map.get(self.parent_uuid)
+        self.__class__._hashes.add(self._md5)
+        self.__class__._date_map[self.parent_uuid] = self.data_date
 
     def getHashData(self):
-        return [self.scryfall_id,self.component,self.name,self.type_line,self.uri]
+        return [self.parent_uuid,self.component,self.name,self.type_line,self.uri]
     
     def getPersistData(self):
         if self._id is None:
             self._id = DBConnection.getNextId()
         if self.print_key is None:
-            self.print_key = MTGPrint.getPrintKey(self.parent_scryfall_id)
-        return [self._id,self.print_key] + self.getHashData()
-
-    def getMD5(self) -> str:
-        return self._md5
+            self.print_key = MTGPrint.getPrintKey(self.parent_uid)
+        return self.getHashData() + [self.print_key,self._md5,self.data_date,self._id]
 
     @staticmethod
     def addToBatch(print_key,parts):
@@ -646,7 +665,7 @@ class Legalities(MTGPersistable):
     def cache_init(cls):
         pass
 
-    def __init__(self,data: dict, parent_uuid: str, data_date = datetime.now()):
+    def __init__(self,data: dict, parent_uuid: str, data_date: datetime = datetime.now()):
         self.data_date = data_date
         self.parent_uuid = parent_uuid
         self.standard: int = Legalities.legalities_map.get(data['standard'])
@@ -694,10 +713,10 @@ class Legalities(MTGPersistable):
                 self.paupercommander,self.duel,self.oldschool,self.premodern,self.predh]
     
     def getPersistData(self):
-        if self._id is None:
+        """ if self._id is None:
             self._id = DBConnection.getNextId()
         if self.print_key is None:
-            self.print_key = MTGPrint.getPrintKey(self.parent_uuid)
+            self.print_key = MTGPrint.getPrintKey(self.parent_uuid) """
         return [self.print_key] + self.getHashData() + [self._md5, self.data_date, self._id]
     
 def attribute(cls):
