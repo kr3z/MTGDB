@@ -6,6 +6,7 @@ import traceback
 import logging
 import logging.config
 import concurrent.futures
+from typing import Callable, List, Any, Tuple
 from datetime import datetime
 from DB import DBConnection
 from Scryfall import scryfall_api_request, scryfall_request
@@ -34,7 +35,7 @@ parser.add_argument('action', choices=['import_files','update_sets','update_card
 args = parser.parse_args()
 
 class DataQueue:
-    def __init__(self, pool: concurrent.futures.Executor, func, sql: str, batch_size : int = BATCH_SIZE):
+    def __init__(self, pool: concurrent.futures.Executor, func: Callable[[str,List[Tuple[Any]]],None], sql: str, batch_size : int = BATCH_SIZE):
         self._data = []
         self._pool = pool
         self._func = func
@@ -46,7 +47,7 @@ class DataQueue:
         logger.debug("Submitted batch with size: %d", len(self._data))
         self._data = []
 
-    def add(self,data: list) -> None:
+    def add(self,data: Tuple[Any]) -> None:
         self._data.append(data)
         if len(self._data) == self._batch_size:
             self.submit()
@@ -55,7 +56,7 @@ class DataQueue:
         if self._data:
             self.submit()
 
-def persist_data(sql: str, data: list) -> None:
+def persist_data(sql: str, data: List[Any]) -> None:
     conn = None
     try:
         conn = DBConnection.getConnection()
@@ -68,11 +69,7 @@ def persist_data(sql: str, data: list) -> None:
             conn.rollback()
 
 #def import_card_data(data, data_date = datetime.now(),conn=None):    
-def import_card_data(data=None, data_date = datetime.now(),conn=None):   
-    if data is not None:
-        for p in data:
-            prnt = MTGPrint(p,data_date = data_date)
-            card = MTGCard(p,data_date = data_date)
+def import_card_data(conn=None):
 
     # TODO: Log counts of parsed objects
     #logger.info("New Prints: %d New Cards: %d" ,len(new_prints),len(new_cards))
@@ -203,13 +200,15 @@ def update_sets():
     logger.debug("Total sets retrieved from scryfall: %d" ,len(set_data))
 
     new_data = DataQueue(persist_pool,persist_data,MTGSet.insert_sql,BATCH_SIZE)
-    update_data = DataQueue(persist_pool,persist_data,MTGSet.insert_sql,BATCH_SIZE)
+    update_data = DataQueue(persist_pool,persist_data,MTGSet.update_sql,BATCH_SIZE)
     while set_data:
         mtg_set = MTGSet.parseSet(set_data.pop(0))
         if not mtg_set.exists():
-            new_data.add(mtg_set.getPersistData() + [mtg_set.getSetTypeKey(),mtg_set.getMD5(), mtg_set.getId()])
-        elif mtg_set.needsUpdate():
-            update_data.add(mtg_set.getPersistData() + [mtg_set.getSetTypeKey(),mtg_set.getMD5(), mtg_set.getId()])
+            #new_data.add(mtg_set.getPersistData() + [mtg_set.getSetTypeKey(),mtg_set.getMD5(), mtg_set.getId()])
+            new_data.add(mtg_set.getPersistData())
+        elif mtg_set.needs_update():
+            #update_data.add(mtg_set.getPersistData() + [mtg_set.getSetTypeKey(),mtg_set.getMD5(), mtg_set.getId()])
+            update_data.add(mtg_set.getPersistData())
 
         """ if len(new_data) == BATCH_SIZE or not set_data and new_data:
             persist_pool.submit(persist_data,MTGSet.insert_sql,new_data)
@@ -235,23 +234,35 @@ def update_cards_by_set(scryfall_id):
     ret = None
     res = conn.execute("SELECT search_uri FROM Sets where scryfall_id = %s",[scryfall_id])
     if res is not None:
+        search_uri = res[0][0]
+        search_uri += "&include_multilingual=true"
         last_update = None
-        last_update_res = DBConnection.singleQuery(last_update_time_sql,[MTGSet.getSetKey(scryfall_id)])
+        last_update_res = conn.execute(last_update_time_sql,[MTGSet.getSetKey(scryfall_id)])
         if last_update_res:
             last_update = last_update_res[0][0]
         if last_update and (datetime.now() - last_update).days < SET_PERIOD_DAYS:
             logger.info("Set with UUID: %s was last updated: %s. Skipping update", scryfall_id, last_update)
             return ret
-        search_uri = res[0][0]
-        search_uri += "&include_multilingual=true"
         logger.debug("Retrieving cards for Set scryfall_id: %s using URI: %s", scryfall_id, search_uri)
         set_data = scryfall_request(search_uri)
         if set_data is not None and len(set_data)>0:
             logger.debug("Retrieved %d cards from URI: %s", len(set_data),search_uri)
 
+            new_card_data = DataQueue(persist_pool,persist_data,MTGCard.insert_sql,BATCH_SIZE)
+            update_card_data = DataQueue(persist_pool,persist_data,MTGCard.update_sql,BATCH_SIZE)
+
             for p in set_data:
                 MTGPrint(p)
-                MTGCard(p)
+                card = MTGCard(p)
+
+                if not card.exists():
+                    new_card_data.add(card.getPersistData())
+                elif card.needsUpdate():
+                    update_card_data.add(card.getPersistData())
+
+            new_card_data.close()
+            update_card_data.close()
+
             ret = import_card_data()
         else:
             logger.error("No data returned from Set search URI: %s", search_uri)
@@ -422,9 +433,11 @@ def importFiles():
                     card = MTGCard(data,data_date = f_date)
 
                     if not card.exists():
-                        new_card_data.add(card.getPersistData() + [card.getMD5(),card.getDate(),card.getId()])
+                        #new_card_data.add(card.getPersistData() + [card.getMD5(),card.getDate(),card.getId()])
+                        new_card_data.add(card.getPersistData())
                     elif card.needsUpdate():
-                        update_card_data.add(card.getPersistData() + [card.getMD5(),card.getDate(),card.getId()])
+                        #update_card_data.add(card.getPersistData() + [card.getMD5(),card.getDate(),card.getId()])
+                        update_card_data.add(card.getPersistData())
 
                     """ if len(new_card_data) == BATCH_SIZE:
                         persist_pool.submit(persist_data,MTGCard.insert_sql,new_card_data)

@@ -1,6 +1,7 @@
 import abc
 import hashlib
 import logging
+from typing import Tuple, List, Any, Dict
 from datetime import datetime
 from DB import DBConnection
 
@@ -11,19 +12,19 @@ PRICE_PERIOD_DAYS = 7
 
 class MTGPersistable(abc.ABC):
     @abc.abstractmethod
-    def getHashData(self) -> list:
+    def getHashData(self) -> Tuple[Any]:
         """ Return a list of persistable data used to generate the md5 hash of the object """
         pass
 
     @abc.abstractmethod
-    def getPersistData(self) -> list:
+    def getPersistData(self) -> Tuple[Any]:
         """ Return a list of all fields to be persisted in the types DB table """
         pass
 
-    def exists(self):
+    def exists(self) -> bool:
         return self._exists
     
-    def needs_update(self):
+    def needs_update(self) -> bool:
         return self._needs_update
     
     @classmethod
@@ -81,20 +82,18 @@ class MTGSet(MTGPersistable):
     _update_data = []
 
     @classmethod
-    def cache_init(cls):
+    def cache_init(cls) -> None:
         result = DBConnection.singleQuery(cls._cache_set_type_sql)
         for s in result:
             cls._set_types[s[1]]=s[0]
 
-    def __init__(self,data, data_date = None):
+    @classmethod
+    def parseSet(cls,data: Dict[str,Any]) -> 'MTGSet':
+        return MTGSet(data)
+    
+    def __init__(self,data: Dict[str,Any], data_date: datetime = None) ->None:
         self.data_date = data_date if data_date else datetime.now()
         self.uuid = data.get('id')
-    @classmethod
-    def parseSet(cls,data: dict) -> 'MTGSet':
-        return MTGSet(data)
-
-    def __init__(self,data):
-        self.scryfall_id = data.get('id')
         self.code = data.get('code')
         self.name = data.get('name')
         self.set_type = data.get('set_type')
@@ -143,13 +142,13 @@ class MTGSet(MTGPersistable):
     def getSetTypeKey(cls,set_type):
         return cls._set_types.get(set_type)
 
-    def getHashData(self):
-        return [self.uuid,self.code,self.name,self.card_count,self.digital,self.foil_only,self.nonfoil_only,
+    def getHashData(self) -> Tuple[Any]:
+        return (self.uuid,self.code,self.name,self.card_count,self.digital,self.foil_only,self.nonfoil_only,
                 self.scryfall_uri,self.uri,self.icon_svg_uri,self.search_uri,self.mtgo_code,self.tcgplayer_id,self.released_at,self.block_code,
-                self.block,self.parent_set_code,self.printed_size]
+                self.block,self.parent_set_code,self.printed_size)
     
-    def getPersistData(self):
-        return self.getHashData() + [MTGSet.getSetTypeKey(self.set_type),self._md5, self.data_date, self._id]
+    def getPersistData(self) -> Tuple[Any]:
+        return self.getHashData() + (MTGSet.getSetTypeKey(self.set_type),self._md5, self.data_date, self._id)
     
 
 class MTGPrint(MTGPersistable):
@@ -180,13 +179,15 @@ class MTGPrint(MTGPersistable):
     _update_data = []
 
     @classmethod
-    def parseData(cls,data, data_date = datetime.now()):
+    def parseData(cls,data: Dict[str,Any], data_date: datetime = None) -> 'MTGPrint':
+        if data_date is None:
+            data_date = datetime.now()
         prnt = MTGPrint(data,data_date=data_date)
         card = MTGCard(data,data_date=data_date)
         return prnt, card
 
 
-    def __init__(self,data, data_date = None):
+    def __init__(self,data: Dict[str,Any], data_date: datetime = None):
         self.data_date = data_date if data_date else datetime.now()
 
         # Read JSON Data
@@ -353,7 +354,7 @@ class MTGPrint(MTGPersistable):
 
         self.legalities = Legalities(data.get('legalities'),self.scryfall_id,self.data_date)
 
-    def exists(self):
+    def exists(self) -> bool:
         return self.scryfall_id in self.__class__.id_map
     
     def needsUpdate(self):
@@ -855,7 +856,7 @@ class MTGCard(MTGPersistable):
     def cache_init(cls):
         pass
     
-    def __init__(self,data, data_date = None):
+    def __init__(self,data: Dict[str,Any], data_date: datetime = None):
         self.data_date = data_date if data_date else datetime.now()
 
         # Read JSON data
@@ -911,15 +912,15 @@ class MTGCard(MTGPersistable):
         self.__class__._hashes.add(self._md5)
         self.__class__._date_map[self.card_id] = self.data_date
     
-    def getHashData(self):
-        return [self.name,self.oracle_id,self.prints_search_uri,self.cmc,self.color_identity,self.reserved,self.type_line,
+    def getHashData(self) -> Tuple[Any]:
+        return (self.name,self.oracle_id,self.prints_search_uri,self.cmc,self.color_identity,self.reserved,self.type_line,
                 self.oracle_text,self.color_indicator,self.colors,self.edhrec_rank,self.loyalty,self.mana_cost,self.penny_rank,
-                self.power,self.toughness,self.produced_mana,self.hand_modifier,self.life_modifier]
+                self.power,self.toughness,self.produced_mana,self.hand_modifier,self.life_modifier)
     
-    def getPersistData(self):
-        return self.getHashData() + [self._md5,self.data_date,self._id]
+    def getPersistData(self) -> Tuple[Any]:
+        return self.getHashData() + (self._md5,self.data_date,self._id)
     
     @classmethod
-    def getCardKey(cls,card_id):
+    def getCardKey(cls,card_id: str) -> int:
         return cls._id_map.get(card_id)
 
