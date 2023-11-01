@@ -50,7 +50,7 @@ CREATE TABLE `Cards` (
   `hash` varchar(200) COLLATE latin1_general_ci NOT NULL,
   `update_count` int(11) DEFAULT '0',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `card_id` varchar(200) GENERATED ALWAYS AS (concat(`name`,ifnull(`oracle_id`,''))) VIRTUAL,
+  `card_id` varchar(200) GENERATED ALWAYS AS (concat(UPPER(`name`),ifnull(`oracle_id`,''))) VIRTUAL,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `ux_name,oracle_id` (`name`,`oracle_id`),
   UNIQUE KEY `ux_Cards_card_id` (`card_id`),

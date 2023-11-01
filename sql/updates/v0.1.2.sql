@@ -1,0 +1,1 @@
+ALTER TABLE `Cards` MODIFY `card_id` VARCHAR(200) CHARACTER SET latin1 AS (concat(UPPER(`name`),ifnull(`oracle_id`,''))) VIRTUAL;

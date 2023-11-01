@@ -395,7 +395,8 @@ def importFiles():
                     id = DBConnection.getNextId()
                     cursor.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
                     conn.commit()
-        for file,v in scryfall_rulings.items():
+        # TODO: Need to implement rulings files
+        """ for file,v in scryfall_rulings.items():
             with open(WORKING_DIR+os.sep+"import/"+file) as f:
                 f_type = v[0]
                 f_date = v[1]
@@ -404,7 +405,7 @@ def importFiles():
                 if success:
                     id = DBConnection.getNextId()
                     cursor.execute(import_sql,[id,file,"scryfall-"+f_type,datetime.now()])
-                    conn.commit()
+                    conn.commit() """
         for file,v in cardcastle_data.items():
             f_type = v[0]
             f_date = v[1]

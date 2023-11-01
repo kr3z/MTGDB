@@ -297,7 +297,7 @@ class MTGPrint(MTGPersistable):
 
         self.name = data.get('name')
         self.oracle_id = data.get('oracle_id')
-        self.card_id = ''.join(filter(None,[self.name,self.oracle_id]))
+        self.card_id = ''.join(filter(None,[self.name.upper(),self.oracle_id]))
         self.md5 = None
 
         # Cache prints for this set if not already done
@@ -876,7 +876,10 @@ class MTGCard(MTGPersistable):
         # card name is not a unique identifier by itself as there are certain tokens that have the same name but different card properties
         # oracle_id should be a unique identifer, except that reversible cards do not have an oracle_id. Instead each face will have its own oracle_id
         # however the combination of card name and oracle_id should provide a unique identifier for all cards
-        self.card_id = ''.join(filter(None,[self.name,self.oracle_id]))
+        # card name is converted to upper case in order to make the card_id case insensitive
+        # sometimes the capitalization of articles in card names can change for newly announced unreleased cards
+        # using a case insensitive card_id allows us to recognize those capitalization changes as the same card
+        self.card_id = ''.join(filter(None,[self.name.upper(),self.oracle_id]))
 
         # Calculate hash of card data so we can easily identify if existing data needs to be updated
         self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
