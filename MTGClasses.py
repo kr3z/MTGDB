@@ -92,6 +92,8 @@ class MTGSet(MTGPersistable):
         self.code = data.get('code')
         self.name = data.get('name')
         self.set_type = data.get('set_type')
+        if self.set_type == "promos":
+          self.set_type="promo"
         self.card_count = int(data.get('card_count'))
         self.digital = data.get('digital')=="true"
         self.foil_only = data.get('foil_only')=="true"
@@ -301,6 +303,28 @@ class MTGPrint(MTGPersistable):
         self.md5 = None
 
         # Cache prints for this set if not already done
+        """ if 'd13bfc70-6137-4179-aa96-da30fd84de29' not in MTGPrint._cached_sets:
+            result = DBConnection.singleQuery(MTGPrint.existing_sql,['d13bfc70-6137-4179-aa96-da30fd84de29','d13bfc70-6137-4179-aa96-da30fd84de29','d13bfc70-6137-4179-aa96-da30fd84de29','d13bfc70-6137-4179-aa96-da30fd84de29'])
+            # TODO: Add error logging if we get no results
+            for p in result:
+                MTGPrint.id_map[p[1]]=p[0]
+                MTGPrint.hashes.add(p[2])
+                MTGPrint.date_map[p[1]] = p[3]
+                if p[4] not in MTGPrint._cached_sets:
+                    MTGPrint._cached_sets.add(p[4])
+
+        if 'bfd52011-8440-4d33-ac40-c9a63da86c90' not in MTGPrint._cached_sets:
+            result = DBConnection.singleQuery(MTGPrint.existing_sql,['bfd52011-8440-4d33-ac40-c9a63da86c90','bfd52011-8440-4d33-ac40-c9a63da86c90','bfd52011-8440-4d33-ac40-c9a63da86c90','bfd52011-8440-4d33-ac40-c9a63da86c90'])
+            # TODO: Add error logging if we get no results
+            for p in result:
+                MTGPrint.id_map[p[1]]=p[0]
+                MTGPrint.hashes.add(p[2])
+                MTGPrint.date_map[p[1]] = p[3]
+                if p[4] not in MTGPrint._cached_sets:
+                    MTGPrint._cached_sets.add(p[4]) """
+
+
+
         if self.set_scryfall_id not in MTGPrint._cached_sets:
             result = DBConnection.singleQuery(MTGPrint.existing_sql,[self.set_scryfall_id,self.set_scryfall_id,self.set_scryfall_id,self.set_scryfall_id])
             # TODO: Add error logging if we get no results
@@ -681,8 +705,14 @@ class Legalities(MTGPersistable):
         self.penny: int = Legalities.legalities_map.get(data['penny'])
         self.commander: int = Legalities.legalities_map.get(data['commander'])
         self.oathbreaker: int = Legalities.legalities_map.get(data['oathbreaker'])
-        self.brawl: int = Legalities.legalities_map.get(data['brawl'])
-        self.historicbrawl: int = Legalities.legalities_map.get(data['historicbrawl'])
+        #self.brawl: int = Legalities.legalities_map.get(data['brawl'])
+        #self.historicbrawl: int = Legalities.legalities_map.get(data['historicbrawl'])
+        #self.brawl = data['brawl']
+        #self.historicbrawl = data['historicbrawl']
+        #self.brawl = data['standardbrawl']
+        #self.historicbrawl = data['brawl']
+        self.brawl: int = Legalities.legalities_map.get(data['standardbrawl'])
+        self.historicbrawl: int = Legalities.legalities_map.get(data['brawl'])
         self.alchemy: int = Legalities.legalities_map.get(data['alchemy'])
         self.paupercommander: int = Legalities.legalities_map.get(data['paupercommander'])
         self.duel: int = Legalities.legalities_map.get(data['duel'])
@@ -879,7 +909,7 @@ class MTGCard(MTGPersistable):
         # card name is converted to upper case in order to make the card_id case insensitive
         # sometimes the capitalization of articles in card names can change for newly announced unreleased cards
         # using a case insensitive card_id allows us to recognize those capitalization changes as the same card
-        self.card_id = ''.join(filter(None,[self.name.upper(),self.oracle_id]))
+        self.card_id = ''.join(filter(None,[self.name,self.oracle_id])).upper()
 
         # Calculate hash of card data so we can easily identify if existing data needs to be updated
         self._md5 = hashlib.md5(''.join(str(field) for field in self.getHashData()).encode('utf-8')).hexdigest()
